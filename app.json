@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Sidenote",
+    "slug": "sidenote",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1C1C1E"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sidenote.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1C1C1E"
+      },
+      "package": "com.sidenote.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
