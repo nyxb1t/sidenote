@@ -4,10 +4,11 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../theme/colors';
 
-import HomeScreen from '../screens/HomeScreen';
-import ChatScreen from '../screens/ChatScreen';
-import NotesScreen from '../screens/NotesScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import HomeScreen    from '../screens/HomeScreen';
+import ChatsStack    from './ChatsStack';
+import NotesStack    from './NotesStack';
+import ProfileStack  from './ProfileStack';
+
 
 const Tab = createBottomTabNavigator();
 
@@ -45,7 +46,7 @@ const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Chat"
-        component={ChatScreen}
+        component={ChatsStack}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon name="chatbubble-outline" label="chats" focused={focused} />
@@ -54,7 +55,8 @@ const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Notes"
-        component={NotesScreen}
+        component={NotesStack}
+
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon name="document-text-outline" label="notes" focused={focused} />
@@ -63,7 +65,7 @@ const BottomTabNavigator = () => {
       />
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
+        component={ProfileStack}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon name="person-outline" label="profile" focused={focused} />

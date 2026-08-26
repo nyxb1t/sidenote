@@ -34,10 +34,8 @@ const NotesScreen = ({ navigation }) => {
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <Text style={styles.screenTitle}>notes archive</Text>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.75}>
-          <Ionicons name="add" size={22} color={Colors.yellow} />
-        </TouchableOpacity>
       </View>
+
 
       {/* ── SEARCH ── */}
       <View style={styles.searchContainer}>
@@ -104,8 +102,9 @@ const NotesScreen = ({ navigation }) => {
             <NoteCard
               key={note.id}
               note={note}
-              onPress={() => navigation.navigate('Chat')}
+              onPress={() => navigation.navigate('TopicNotes', { topic: note })}
             />
+
           ))
         )}
         <View style={{ height: 16 }} />
@@ -122,9 +121,6 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 16,
@@ -135,16 +131,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.3,
   },
-  addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // Search
   searchContainer: {
