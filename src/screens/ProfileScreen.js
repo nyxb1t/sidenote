@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import {
   CURRENT_TOPIC,
 } from '../data/mockData';
 
+// ─── Shared sub-components ───────────────────────────────────────────────────
+
 const SectionTitle = ({ children, actionLabel, onAction }) => (
   <View style={styles.sectionHeader}>
     <Text style={styles.sectionTitle}>{children}</Text>
@@ -31,149 +33,210 @@ const SectionTitle = ({ children, actionLabel, onAction }) => (
   </View>
 );
 
-const ProfileScreen = () => {
+const InfoRow = ({ icon, label, value }) => (
+  <View style={styles.infoRow}>
+    <Ionicons name={icon} size={15} color={Colors.textMuted} style={styles.infoRowIcon} />
+    <Text style={styles.infoRowLabel}>{label}</Text>
+    <Text style={styles.infoRowValue}>{value}</Text>
+  </View>
+);
+
+// ─── You Tab ─────────────────────────────────────────────────────────────────
+
+const YouTab = () => (
+  <ScrollView
+    style={styles.tabScroll}
+    contentContainerStyle={styles.tabScrollContent}
+    showsVerticalScrollIndicator={false}
+  >
+    {/* Progress Overview — topics + hours only */}
+    <View style={styles.section}>
+      <SectionTitle>progress overview</SectionTitle>
+      <View style={styles.statsRow}>
+        <StatCard value={PROFILE_STATS.topicsStudied} label="topics" />
+        <StatCard value={`${PROFILE_STATS.hoursThisWeek}h`} label="hours" />
+      </View>
+    </View>
+
+    {/* Current Learning */}
+    <View style={styles.section}>
+      <SectionTitle>current learning</SectionTitle>
+      <View style={styles.currentLearningCard}>
+        <View style={styles.currentLearningTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.currentSubject}>
+              {CURRENT_TOPIC.subject} › {CURRENT_TOPIC.title}
+            </Text>
+            <Text style={styles.currentSubtitle}>{CURRENT_TOPIC.subtitle}</Text>
+          </View>
+          <Text style={styles.currentPct}>{Math.round(CURRENT_TOPIC.progress * 100)}%</Text>
+        </View>
+        <ProgressBar progress={CURRENT_TOPIC.progress} height={4} />
+      </View>
+    </View>
+
+    {/* Learning Insights */}
+    <View style={styles.section}>
+      <SectionTitle actionLabel="view all">learning insights</SectionTitle>
+      {LEARNING_INSIGHTS.map((insight) => (
+        <View key={insight.id} style={styles.insightRow}>
+          <Text style={styles.insightIcon}>{insight.icon}</Text>
+          <Text style={styles.insightText}>{insight.text}</Text>
+        </View>
+      ))}
+    </View>
+
+    {/* Usage This Month */}
+    <View style={styles.section}>
+      <SectionTitle>usage this month</SectionTitle>
+      {USAGE_THIS_MONTH.map((item, i) => (
+        <View key={i} style={styles.usageRow}>
+          <Ionicons name={item.icon} size={16} color={Colors.textMuted} />
+          <Text style={styles.usageLabel}>{item.label}</Text>
+          <Text style={styles.usageCount}>{item.count}</Text>
+        </View>
+      ))}
+    </View>
+
+    {/* Account Info */}
+    <View style={styles.section}>
+      <SectionTitle>account info</SectionTitle>
+      <View style={styles.accountCard}>
+        <InfoRow icon="mail-outline" label="Email" value={USER.email} />
+        <View style={styles.accountDivider} />
+        <InfoRow icon="call-outline" label="Phone" value={USER.phone} />
+        <View style={styles.accountDivider} />
+        <InfoRow icon="calendar-outline" label="Member since" value={USER.joinDate} />
+      </View>
+    </View>
+
+    <View style={{ height: 32 }} />
+  </ScrollView>
+);
+
+// ─── Plan Tab ────────────────────────────────────────────────────────────────
+
+const PlanTab = () => {
   const creditPct = USER.creditsUsed / USER.creditsTotal;
+
+  return (
+    <ScrollView
+      style={styles.tabScroll}
+      contentContainerStyle={styles.tabScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Current Plan card */}
+      <View style={styles.section}>
+        <SectionTitle>current plan</SectionTitle>
+        <View style={styles.planCard}>
+          <View style={styles.planRow}>
+            <View>
+              <Text style={styles.planName}>{USER.plan}</Text>
+              <Text style={styles.planDetail}>✕ 1,000 credits / month</Text>
+            </View>
+            <TouchableOpacity style={styles.upgradeBtn}>
+              <Text style={styles.upgradeBtnText}>Upgrade</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Credits bar */}
+          <View style={styles.creditsSection}>
+            <View style={styles.creditsRow}>
+              <Text style={styles.creditsLabel}>credits used</Text>
+              <Text style={styles.creditsValue}>
+                {USER.creditsUsed} / {USER.creditsTotal}
+              </Text>
+            </View>
+            <ProgressBar progress={creditPct} height={5} style={{ marginTop: 8 }} />
+          </View>
+
+          <View style={styles.resetRow}>
+            <Ionicons name="refresh-outline" size={13} color={Colors.textMuted} />
+            <Text style={styles.planMeta}>resets on 1 Jun 2025</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Need more credits nudge */}
+      <View style={styles.section}>
+        <View style={styles.creditsNudgeCard}>
+          <Text style={styles.creditsNudgeTitle}>Need more credits?</Text>
+          <Text style={styles.creditsNudgeSubtext}>
+            Upgrade your plan or buy add-on packs.
+          </Text>
+          <TouchableOpacity style={styles.nudgeBtn}>
+            <Text style={styles.nudgeBtnText}>View options</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={{ height: 32 }} />
+    </ScrollView>
+  );
+};
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
+
+const TABS = ['you', 'plan'];
+
+const ProfileScreen = ({ navigation }) => {
+  const [activeTab, setActiveTab] = useState('you');
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-
-        {/* ── PROFILE HEADER ── */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarLarge}>
-            <Text style={styles.avatarInitial}>{USER.name.charAt(0)}</Text>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.userName}>{USER.name}</Text>
-            <Text style={styles.userTagline}>keep going, you're doing great ✦</Text>
-          </View>
-          <TouchableOpacity style={styles.settingsBtn}>
-            <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
-          </TouchableOpacity>
+      {/* ── PROFILE HEADER ── */}
+      <View style={styles.profileHeader}>
+        <View style={styles.avatarLarge}>
+          <Text style={styles.avatarInitial}>{USER.name.charAt(0)}</Text>
         </View>
+        <View style={styles.profileInfo}>
+          <Text style={styles.userName}>{USER.name}</Text>
+          <Text style={styles.userTagline}>keep going, you're doing great ✦</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => navigation.navigate('Settings')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
+        </TouchableOpacity>
+      </View>
 
-        {/* ── TAB ROW (decorative) ── */}
+      {/* ── SEGMENTED CONTROL (you | plan) ── */}
+      <View style={styles.tabRowWrapper}>
         <View style={styles.tabRow}>
-          {['you', 'plan', 'settings'].map((tab) => (
-            <TouchableOpacity key={tab} style={[styles.tab, tab === 'plan' && styles.tabActive]}>
-              <Text style={[styles.tabText, tab === 'plan' && styles.tabTextActive]}>
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* ── PROGRESS OVERVIEW ── */}
-        <View style={styles.section}>
-          <SectionTitle>progress overview</SectionTitle>
-          <View style={styles.statsRow}>
-            <StatCard value={PROFILE_STATS.topicsStudied} label="topics" />
-            <StatCard value={`${PROFILE_STATS.hoursThisWeek}h`} label="current streak" />
-            <StatCard value={`${PROFILE_STATS.streak} days`} label="streak" />
-          </View>
-        </View>
-
-        {/* ── CURRENT LEARNING ── */}
-        <View style={styles.section}>
-          <SectionTitle>current learning</SectionTitle>
-          <View style={styles.currentLearningCard}>
-            <View style={styles.currentLearningTop}>
-              <View>
-                <Text style={styles.currentSubject}>{CURRENT_TOPIC.subject} › {CURRENT_TOPIC.title}</Text>
-                <Text style={styles.currentSubtitle}>{CURRENT_TOPIC.subtitle}</Text>
-              </View>
-              <Text style={styles.currentPct}>{Math.round(CURRENT_TOPIC.progress * 100)}%</Text>
-            </View>
-            <ProgressBar progress={CURRENT_TOPIC.progress} height={4} />
-          </View>
-        </View>
-
-        {/* ── PLAN CARD ── */}
-        <View style={styles.section}>
-          <SectionTitle>current plan</SectionTitle>
-          <View style={styles.planCard}>
-            <View style={styles.planRow}>
-              <Text style={styles.planName}>{USER.plan}</Text>
-              <TouchableOpacity style={styles.upgradeBtn}>
-                <Text style={styles.upgradeBtnText}>Upgrade</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.planDetail}>✕ 200 credits / month</Text>
-
-            {/* Credits bar */}
-            <View style={styles.creditsSection}>
-              <View style={styles.creditsRow}>
-                <Text style={styles.creditsLabel}>credits left</Text>
-                <Text style={styles.creditsValue}>
-                  {USER.creditsUsed} / {USER.creditsTotal}
+          {TABS.map((tab) => {
+            const isActive = tab === activeTab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tab, isActive && styles.tabActive]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                  {tab}
                 </Text>
-              </View>
-              <ProgressBar progress={creditPct} height={4} style={{ marginTop: 8 }} />
-            </View>
-
-            <Text style={styles.planMeta}>resets on 1 Jun 2025</Text>
-          </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
+      </View>
 
-        {/* ── LEARNING INSIGHTS ── */}
-        <View style={styles.section}>
-          <SectionTitle actionLabel="view all">learning insights</SectionTitle>
-          {LEARNING_INSIGHTS.map((insight) => (
-            <View key={insight.id} style={styles.insightRow}>
-              <Text style={styles.insightIcon}>{insight.icon}</Text>
-              <Text style={styles.insightText}>{insight.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* ── USAGE THIS MONTH ── */}
-        <View style={styles.section}>
-          <SectionTitle>usage this month</SectionTitle>
-          {USAGE_THIS_MONTH.map((item, i) => (
-            <View key={i} style={styles.usageRow}>
-              <Ionicons name={item.icon} size={16} color={Colors.textMuted} />
-              <Text style={styles.usageLabel}>{item.label}</Text>
-              <Text style={styles.usageCount}>{item.count}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* ── NEED MORE CREDITS ── */}
-        <View style={styles.section}>
-          <View style={styles.creditsNudgeCard}>
-            <Text style={styles.creditsNudgeTitle}>Need more credits?</Text>
-            <Text style={styles.creditsNudgeSubtext}>
-              Upgrade your plan or buy add-on packs.
-            </Text>
-            <TouchableOpacity style={styles.nudgeBtn}>
-              <Text style={styles.nudgeBtnText}>View options</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={{ height: 32 }} />
-      </ScrollView>
+      {/* ── TAB CONTENT ── */}
+      {activeTab === 'you' ? <YouTab /> : <PlanTab />}
     </SafeAreaView>
   );
 };
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: Colors.bg,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
   },
 
   // Profile header
@@ -181,7 +244,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginBottom: 20,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   avatarLarge: {
     width: 52,
@@ -213,10 +278,13 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  // Tab row
+  // Segmented control
+  tabRowWrapper: {
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
   tabRow: {
     flexDirection: 'row',
-    marginBottom: 24,
     borderRadius: 10,
     backgroundColor: Colors.surface,
     padding: 4,
@@ -242,7 +310,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Section
+  // Tab scroll areas
+  tabScroll: {
+    flex: 1,
+  },
+  tabScrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+
+  // Sections
   section: {
     marginBottom: 24,
     gap: 12,
@@ -299,61 +376,7 @@ const styles = StyleSheet.create({
     color: Colors.yellow,
     fontSize: 16,
     fontWeight: '700',
-  },
-
-  // Plan card
-  planCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 10,
-  },
-  planRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  planName: {
-    color: Colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  upgradeBtn: {
-    backgroundColor: Colors.yellow,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  upgradeBtnText: {
-    color: '#1C1C1E',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  planDetail: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
-  creditsSection: {
-    marginTop: 4,
-  },
-  creditsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  creditsLabel: {
-    color: Colors.textMuted,
-    fontSize: 12,
-  },
-  creditsValue: {
-    color: Colors.yellow,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  planMeta: {
-    color: Colors.textMuted,
-    fontSize: 11,
+    marginLeft: 12,
   },
 
   // Insights
@@ -398,7 +421,105 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Credits nudge
+  // Account Info card
+  accountCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    gap: 10,
+  },
+  infoRowIcon: {
+    width: 18,
+  },
+  infoRowLabel: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    width: 90,
+  },
+  infoRowValue: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  accountDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginHorizontal: 16,
+  },
+
+  // Plan card
+  planCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 14,
+  },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  planName: {
+    color: Colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  upgradeBtn: {
+    backgroundColor: Colors.yellow,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  upgradeBtnText: {
+    color: '#1C1C1E',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  planDetail: {
+    color: Colors.textMuted,
+    fontSize: 12,
+  },
+  creditsSection: {
+    gap: 0,
+  },
+  creditsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  creditsLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
+  },
+  creditsValue: {
+    color: Colors.yellow,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  resetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  planMeta: {
+    color: Colors.textMuted,
+    fontSize: 11,
+  },
+
+  // Credits nudge card
   creditsNudgeCard: {
     backgroundColor: Colors.coralDim,
     borderRadius: 14,
