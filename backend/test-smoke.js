@@ -22,7 +22,10 @@
 // Load environment variables from backend/.env
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
-const { generateLesson } = require('./ai/lessonService');
+const { generateLesson }   = require('./ai/lessonService');
+const { validateLesson }   = require('./ai/validators/lessonValidator');
+const { validateQuiz }     = require('./ai/validators/quizValidator');
+const { ValidationError }  = require('./ai/validators/ValidationError');
 
 // ─── Sample learner model ─────────────────────────────────────────────────────
 
@@ -123,6 +126,128 @@ async function runTest2() {
   }
 }
 
+// ─── Test 3: validateLesson rejects invalid input ─────────────────────────────
+
+async function runTest3() {
+  printSection('TEST 3 — validateLesson rejects invalid lesson (no AI call)');
+
+  // A lesson object that is missing the required sections field entirely.
+  const invalidLesson = {
+    version: 1,
+    title:   'Recursion Basics',
+    topic:   'Recursion',
+    teachingStrategy: 'visual',
+    // sections: intentionally omitted
+  };
+
+  try {
+    validateLesson(invalidLesson);
+    // If we reach here, the validator did not throw — that is a failure.
+    console.error('\n✗ Test 3 FAILED: validateLesson did not throw for a missing sections field.');
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      console.log(`\n✓ validateLesson correctly threw ValidationError`);
+      console.log(`  field:    ${err.field}`);
+      console.log(`  expected: ${err.expected}`);
+      console.log(`  received: ${err.received}`);
+      console.log(`  message:  ${err.message}`);
+    } else {
+      console.error(`\n✗ Test 3 FAILED: unexpected error type — ${err.name}: ${err.message}`);
+    }
+  }
+
+  // A second case: sections present but a section has an unknown type.
+  const invalidSectionType = {
+    version: 1,
+    title:   'Recursion Basics',
+    topic:   'Recursion',
+    teachingStrategy: 'visual',
+    sections: [
+      { type: 'unknown_type', content: 'some content' },
+    ],
+  };
+
+  try {
+    validateLesson(invalidSectionType);
+    console.error('\n✗ Test 3b FAILED: validateLesson did not throw for unknown section type.');
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      console.log(`\n✓ validateLesson correctly threw ValidationError for unknown section type`);
+      console.log(`  field:    ${err.field}`);
+      console.log(`  expected: ${err.expected}`);
+      console.log(`  received: ${err.received}`);
+    } else {
+      console.error(`\n✗ Test 3b FAILED: unexpected error type — ${err.name}: ${err.message}`);
+    }
+  }
+}
+
+// ─── Test 4: validateQuiz rejects invalid input ───────────────────────────────
+
+async function runTest4() {
+  printSection('TEST 4 — validateQuiz rejects invalid quiz (no AI call)');
+
+  // A quiz where an mcq question is missing its options array.
+  const invalidQuiz = {
+    topic:      'Recursion',
+    difficulty: 'intermediate',
+    questions: [
+      {
+        id:          'q1',
+        type:        'mcq',
+        question:    'What is the base case of a recursive function?',
+        explanation: 'The base case stops the recursion.',
+        // options: intentionally omitted
+        correctIndex: 0,
+      },
+    ],
+  };
+
+  try {
+    validateQuiz(invalidQuiz);
+    console.error('\n✗ Test 4 FAILED: validateQuiz did not throw for a missing options field.');
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      console.log(`\n✓ validateQuiz correctly threw ValidationError`);
+      console.log(`  field:    ${err.field}`);
+      console.log(`  expected: ${err.expected}`);
+      console.log(`  received: ${err.received}`);
+      console.log(`  message:  ${err.message}`);
+    } else {
+      console.error(`\n✗ Test 4 FAILED: unexpected error type — ${err.name}: ${err.message}`);
+    }
+  }
+
+  // A second case: true_false question with a non-boolean correctAnswer.
+  const invalidTrueFalse = {
+    topic:      'Recursion',
+    difficulty: 'beginner',
+    questions: [
+      {
+        id:            'q1',
+        type:          'true_false',
+        question:      'Recursion always uses less memory than iteration.',
+        explanation:   'This is false — recursion uses call stack memory.',
+        correctAnswer: 'false', // string instead of boolean
+      },
+    ],
+  };
+
+  try {
+    validateQuiz(invalidTrueFalse);
+    console.error('\n✗ Test 4b FAILED: validateQuiz did not throw for a string correctAnswer.');
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      console.log(`\n✓ validateQuiz correctly threw ValidationError for string correctAnswer`);
+      console.log(`  field:    ${err.field}`);
+      console.log(`  expected: ${err.expected}`);
+      console.log(`  received: ${err.received}`);
+    } else {
+      console.error(`\n✗ Test 4b FAILED: unexpected error type — ${err.name}: ${err.message}`);
+    }
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -143,6 +268,8 @@ async function main() {
 
   await runTest1();
   await runTest2();
+  await runTest3();
+  await runTest4();
 
   printSection('SMOKE TEST COMPLETE');
   console.log('');

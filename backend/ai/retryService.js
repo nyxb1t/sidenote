@@ -27,8 +27,8 @@
 
 const { selectTeachingStrategy } = require('../learner/learnerService');
 const { buildRetryPrompt }       = require('./prompts/retryPrompt');
-
-const { callAI } = require('./aiClient');
+const { callAI }                 = require('./aiClient');
+const { validateLesson }         = require('./validators/lessonValidator');
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -63,6 +63,10 @@ async function generateRetryExplanation(topic, learnerModel, previousStrategy) {
 
   // Step 3: Send prompt to AI provider and parse the response.
   const lessonJSON = await callAI(prompt);
+
+  // Step 4: Validate the AI output matches the lesson schema.
+  validateLesson(lessonJSON);
+
   return lessonJSON;
 }
 

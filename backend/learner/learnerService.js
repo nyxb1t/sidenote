@@ -120,9 +120,11 @@ function _handleLessonComplete(model, event) {
   model.mastery.byTopic[topic] = updated;
   model.mastery.overall = _recalcOverall(model.mastery);
 
-  // Promote to knownTopics if threshold crossed
+  // Promote to knownTopics if threshold crossed, and remove from weakAreas.
   if (updated >= KNOWN_TOPIC_THRESHOLD && !model.knownTopics.includes(topic)) {
     model.knownTopics.push(topic);
+    // A mastered topic must not remain flagged as a weak area.
+    model.weakAreas = model.weakAreas.filter((t) => t !== topic);
   }
 
   // Record strategy
@@ -156,7 +158,8 @@ function _handleQuizResult(model, event) {
   // Update weakAreas
   if (blended < WEAK_AREA_THRESHOLD && !model.weakAreas.includes(topic)) {
     model.weakAreas.push(topic);
-  } else if (blended >= KNOWN_TOPIC_THRESHOLD) {
+  } else if (blended >= WEAK_AREA_THRESHOLD) {
+    // Mastery has risen above the weak threshold — remove from weakAreas if present.
     model.weakAreas = model.weakAreas.filter((t) => t !== topic);
   }
 
@@ -284,8 +287,8 @@ function selectTeachingStrategy(topic, learnerModel) {
   // Effective mastery for this topic (falls back to overall when not tracked yet)
   const effectiveMastery = topicMastery !== undefined ? topicMastery : overall;
 
-  // Rule 1 & 2: beginner-level mastery
-  if (effectiveMastery < 0.3) {
+  // Rule 1 & 2: beginner-level mastery → step-by-step, unless that just failed.
+  if (effectiveMastery < 0.3 && lastStrategy !== 'step-by-step') {
     return 'step-by-step';
   }
 

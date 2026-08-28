@@ -23,6 +23,7 @@ const { selectTeachingStrategy } = require('../learner/learnerService');
 const { buildLessonPrompt }      = require('./prompts/lessonPrompt');
 
 const { callAI } = require('./aiClient');
+const { validateLesson }         = require('./validators/lessonValidator');
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -52,6 +53,10 @@ async function generateLesson(topic, learnerModel) {
 
   // Step 3: Send prompt to AI provider and parse the response.
   const lessonJSON = await callAI(prompt);
+
+  // Step 4: Validate the AI output matches the lesson schema.
+  validateLesson(lessonJSON);
+
   return lessonJSON;
 }
 

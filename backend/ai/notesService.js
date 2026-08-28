@@ -18,8 +18,8 @@
  */
 
 const { buildNotesPrompt } = require('./prompts/notesPrompt');
-
-const { callAI } = require('./aiClient');
+const { callAI }           = require('./aiClient');
+const { validateNotes }    = require('./validators/notesValidator');
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -44,6 +44,10 @@ async function generateNotes(lessonContent) {
 
   // Step 2: Send prompt to AI provider and parse the response.
   const notesJSON = await callAI(prompt);
+
+  // Step 3: Validate the AI output matches the notes schema.
+  validateNotes(notesJSON);
+
   return notesJSON;
 }
 

@@ -18,8 +18,8 @@
  */
 
 const { buildQuizPrompt } = require('./prompts/quizPrompt');
-
-const { callAI } = require('./aiClient');
+const { callAI }          = require('./aiClient');
+const { validateQuiz }    = require('./validators/quizValidator');
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -45,6 +45,10 @@ async function generateQuiz(lessonContent, learnerModel) {
 
   // Step 2: Send prompt to AI provider and parse the response.
   const quizJSON = await callAI(prompt);
+
+  // Step 3: Validate the AI output matches the quiz schema.
+  validateQuiz(quizJSON);
+
   return quizJSON;
 }
 
