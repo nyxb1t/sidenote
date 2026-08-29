@@ -163,7 +163,7 @@ function _handleQuizResult(model, event) {
     model.weakAreas = model.weakAreas.filter((t) => t !== topic);
   }
 
-  // Remove from weakAreas if mastery now exceeds threshold
+  // Promote to knownTopics if mastery now exceeds the known threshold.
   if (blended >= KNOWN_TOPIC_THRESHOLD && !model.knownTopics.includes(topic)) {
     model.knownTopics.push(topic);
   }
@@ -291,8 +291,6 @@ function selectTeachingStrategy(topic, learnerModel) {
   if (effectiveMastery < 0.3 && lastStrategy !== 'step-by-step') {
     return 'step-by-step';
   }
-
-  // Rule 3: topic is a known weak area → analogy gives a fresh angle
   if (weakAreas.includes(topic) && lastStrategy !== 'analogy') {
     return 'analogy';
   }

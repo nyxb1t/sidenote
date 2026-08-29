@@ -473,26 +473,30 @@ function runTest8() {
 
   const TOPIC = 'Recursion';
 
-  const beginnerModel = freshLearner({
-    goal:          'Pass GATE CS 2025',
-    weakAreas:     ['Recursion'],
-    knownTopics:   [],
-    mastery:       { overall: 0.1, byTopic: { [TOPIC]: 0.1 } },
-    mistakePatterns: ['Struggles to identify base cases'],
-    examDate:      '2025-02-02',
-  });
+  const beginnerContext = {
+    memoryType: 'longterm',
+    learnerProfile: {
+      goal:            'Pass GATE CS 2025',
+      weakAreas:       ['Recursion'],
+      knownTopics:     [],
+      masteryByTopic:  { [TOPIC]: 0.1 },
+      mistakePatterns: ['Struggles to identify base cases'],
+    },
+  };
 
-  const advancedModel = freshLearner({
-    goal:          'Pass GATE CS 2025',
-    weakAreas:     [],
-    knownTopics:   ['Recursion', 'Dynamic Programming', 'Sorting Algorithms'],
-    mastery:       { overall: 0.9, byTopic: { [TOPIC]: 0.9 } },
-    mistakePatterns: [],
-    examDate:      '2025-02-02',
-  });
+  const advancedContext = {
+    memoryType: 'longterm',
+    learnerProfile: {
+      goal:            'Pass GATE CS 2025',
+      weakAreas:       [],
+      knownTopics:     ['Recursion', 'Dynamic Programming', 'Sorting Algorithms'],
+      masteryByTopic:  { [TOPIC]: 0.9 },
+      mistakePatterns: [],
+    },
+  };
 
-  const beginnerPrompt = buildLessonPrompt(TOPIC, beginnerModel, 'step-by-step');
-  const advancedPrompt = buildLessonPrompt(TOPIC, advancedModel, 'socratic');
+  const beginnerPrompt = buildLessonPrompt(TOPIC, beginnerContext, 'step-by-step');
+  const advancedPrompt = buildLessonPrompt(TOPIC, advancedContext, 'socratic');
 
   // Strip whitespace for meaningful content comparison
   const beginnerNorm = beginnerPrompt.replace(/\s+/g, ' ').trim();

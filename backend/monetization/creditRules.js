@@ -34,6 +34,45 @@ const CREDIT_COSTS = {
   generateVisualExplanation: 1,
 };
 
+// ─── Plan limits table ────────────────────────────────────────────────────────
+
+/**
+ * @type {Record<string, object>}
+ *
+ * Per-plan capability limits consumed by generation services and prompt builders.
+ * memoryType controls how much learner history is injected into prompts.
+ */
+const PLAN_LIMITS = {
+  free: {
+    lessonsPerMonth:  3,
+    creditsPerMonth:  10,
+    quizzesPerMonth:  3,
+    maxQuizQuestions: 5,
+    memoryType:       'session',
+  },
+  basic: {
+    lessonsPerMonth:  10,
+    creditsPerMonth:  50,
+    quizzesPerMonth:  'credit-based',
+    maxQuizQuestions: 10,
+    memoryType:       'recent',
+  },
+  pro: {
+    lessonsPerMonth:  25,
+    creditsPerMonth:  120,
+    quizzesPerMonth:  'credit-based',
+    maxQuizQuestions: 20,
+    memoryType:       'longterm',
+  },
+  advanced: {
+    lessonsPerMonth:  60,
+    creditsPerMonth:  300,
+    quizzesPerMonth:  'credit-based',
+    maxQuizQuestions: 30,
+    memoryType:       'full',
+  },
+};
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -58,10 +97,33 @@ function getCreditCost(action) {
   return CREDIT_COSTS[action];
 }
 
+/**
+ * Returns the capability limits for a given subscription plan.
+ *
+ * @param {string} plan - The plan identifier (must match a key in PLAN_LIMITS).
+ * @returns {object} The limits object for the plan.
+ * @throws {Error} If the plan is not recognised.
+ *
+ * @example
+ * getPlanLimits('free').maxQuizQuestions;  // → 5
+ * getPlanLimits('pro').memoryType;          // → 'longterm'
+ */
+function getPlanLimits(plan) {
+  if (!Object.prototype.hasOwnProperty.call(PLAN_LIMITS, plan)) {
+    throw new Error(
+      `getPlanLimits: unknown plan "${plan}". ` +
+      `Known plans: ${Object.keys(PLAN_LIMITS).join(', ')}.`
+    );
+  }
+  return PLAN_LIMITS[plan];
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
   getCreditCost,
+  getPlanLimits,
   CREDIT_COSTS,
+  PLAN_LIMITS,
 };
 

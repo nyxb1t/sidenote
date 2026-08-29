@@ -7,16 +7,15 @@
  * Re-explains a topic using a different teaching strategy than the one that failed.
  *
  * Public API:
- *   generateRetryExplanation(topic, learnerModel, previousStrategy) → LessonJSON
+ *   generateRetryExplanation(topic, learnerModel, previousStrategy, userContext) → LessonJSON
  *
  * Internal flow:
- *   1. selectTeachingStrategy(topic, learnerModel)                  — picks a NEW strategy
+ *   0. checkEntitlement('generateRetryExplanation', userContext) — blocks if user has no credits
+ *   1. selectTeachingStrategy(topic, learnerModel)               — picks a NEW strategy
  *   2. buildRetryPrompt(topic, learnerModel, strategy, previousStrategy) — builds the prompt
- *   3. callAI(prompt)                                               — Day 2: AI provider call
- *   4. Return parsed LessonJSON (same schema as generateLesson)
- *
- * Day 1 status: Steps 1 and 2 are fully implemented.
- *               Step 3 (callAI) is stubbed — it will be wired in Day 2.
+ *   3. callAI(prompt)                                            — sends to AI, returns parsed JSON
+ *   4. validateLesson(lessonJSON)                                — validates AI output structure
+ *   5. Return LessonJSON (same schema as generateLesson)
  *
  * Strategy guarantee:
  *   selectTeachingStrategy() guarantees the returned strategy differs from
@@ -29,6 +28,7 @@ const { selectTeachingStrategy } = require('../learner/learnerService');
 const { buildRetryPrompt }       = require('./prompts/retryPrompt');
 const { callAI }                 = require('./aiClient');
 const { validateLesson }         = require('./validators/lessonValidator');
+const { checkEntitlement }       = require('../monetization/entitlementGuard');
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -40,11 +40,12 @@ const { validateLesson }         = require('./validators/lessonValidator');
  *                                      learnerModel.lastStrategy should equal previousStrategy
  *                                      so selectTeachingStrategy can rotate away from it.
  * @param {string} previousStrategy   - The teaching strategy used in the failed attempt.
+ * @param {object} userContext        - Entitlement context: { userId, plan, creditsRemaining }.
  * @returns {Promise<object>}         The LessonJSON object with the new explanation.
- * @throws {Error}                    If inputs are invalid, or (Day 1) always throws
- *                                    a NotImplementedError.
+ * @throws {InsufficientCreditsError} If the user does not have enough credits.
+ * @throws {ValidationError}          If the AI response does not match the lesson schema.
  */
-async function generateRetryExplanation(topic, learnerModel, previousStrategy) {
+async function generateRetryExplanation(topic, learnerModel, previousStrategy, userContext) {
   if (!topic || typeof topic !== 'string') {
     throw new Error('generateRetryExplanation: "topic" must be a non-empty string.');
   }
@@ -54,11 +55,19 @@ async function generateRetryExplanation(topic, learnerModel, previousStrategy) {
   if (!previousStrategy || typeof previousStrategy !== 'string') {
     throw new Error('generateRetryExplanation: "previousStrategy" must be a non-empty string.');
   }
+  if (!userContext || typeof userContext !== 'object') {
+    throw new Error('generateRetryExplanation: "userContext" must be a non-null object.');
+  }
 
-  // Step 1: Select a new strategy (guaranteed to differ from lastStrategy)
+  // Step 0: Entitlement check — must run before any AI work.
+  // Throws InsufficientCreditsError if the user is blocked.
+  // Does NOT deduct credits; Person 3's route handler does that on success.
+  checkEntitlement('generateRetryExplanation', userContext);
+
+  // Step 1: Select a new strategy (guaranteed to differ from lastStrategy).
   const strategy = selectTeachingStrategy(topic, learnerModel);
 
-  // Step 2: Build the retry prompt with both the new and previous strategy
+  // Step 2: Build the retry prompt with both the new and previous strategy.
   const prompt = buildRetryPrompt(topic, learnerModel, strategy, previousStrategy);
 
   // Step 3: Send prompt to AI provider and parse the response.
@@ -73,4 +82,3 @@ async function generateRetryExplanation(topic, learnerModel, previousStrategy) {
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = { generateRetryExplanation };
-

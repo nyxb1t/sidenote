@@ -9,10 +9,11 @@
  * Called by: quizService.js
  *
  * @param {object} lessonContent - The full LessonJSON object returned by generateLesson().
- * @param {object} learnerModel  - The current LearnerModel.
+ * @param {object} learnerModel  - The current LearnerModel (or compatible normalized object).
+ * @param {number} maxQuestions  - The maximum number of questions to generate (plan-controlled).
  * @returns {string} The complete prompt to send to the AI provider.
  */
-function buildQuizPrompt(lessonContent, learnerModel) {
+function buildQuizPrompt(lessonContent, learnerModel, maxQuestions) {
   const topic         = lessonContent.topic        ?? 'the lesson topic';
   const strategy      = lessonContent.teachingStrategy ?? 'step-by-step';
   const overallMastery = learnerModel.mastery?.overall ?? 0;
@@ -80,12 +81,12 @@ Do not include any text before or after the JSON.
 }
 
 Rules:
-- Generate exactly 5 questions.
+- Generate exactly ${maxQuestions} questions.
 - Mix question types: at least 3 "mcq" and at least 1 "true_false".
 - All questions must be directly testable from the lesson content provided.
 - Difficulty must match: ${difficulty} — calibrate complexity accordingly.
 - Every question must include an "explanation" field.
-- "id" values must be sequential: "q1", "q2", "q3", "q4", "q5".
+- "id" values must be sequential: "q1" through "q${maxQuestions}".
 - For "mcq": "correctIndex" is the 0-based index into "options".
 - Return valid JSON only. No commentary, no markdown fences.
 `.trim();
