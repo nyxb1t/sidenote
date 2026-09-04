@@ -9,115 +9,180 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../theme/colors';
 import StatCard from '../components/StatCard';
 import ProgressBar from '../components/ProgressBar';
 import {
-  USER,
   PROFILE_STATS,
   LEARNING_INSIGHTS,
   USAGE_THIS_MONTH,
   CURRENT_TOPIC,
 } from '../data/mockData';
+import { globalState } from '../data/globalState';
+import { useFocusEffect } from '@react-navigation/native';
+import Colors from '../theme/colors';
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
-const SectionTitle = ({ children, actionLabel, onAction }) => (
-  <View style={styles.sectionHeader}>
-    <Text style={styles.sectionTitle}>{children}</Text>
-    {actionLabel && (
-      <TouchableOpacity onPress={onAction}>
-        <Text style={styles.sectionAction}>{actionLabel}</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
+const SectionTitle = ({ children, actionLabel, onAction }) => {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{children}</Text>
+      {actionLabel && (
+        <TouchableOpacity onPress={onAction}>
+          <Text style={styles.sectionAction}>{actionLabel}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
 
-const InfoRow = ({ icon, label, value }) => (
-  <View style={styles.infoRow}>
-    <Ionicons name={icon} size={15} color={Colors.textMuted} style={styles.infoRowIcon} />
-    <Text style={styles.infoRowLabel}>{label}</Text>
-    <Text style={styles.infoRowValue}>{value}</Text>
-  </View>
-);
+const InfoRow = ({ icon, label, value }) => {
+  return (
+    <View style={styles.infoRow}>
+      <Ionicons name={icon} size={15} color={Colors.textMuted} style={styles.infoRowIcon} />
+      <Text style={styles.infoRowLabel}>{label}</Text>
+      <Text style={styles.infoRowValue}>{value}</Text>
+    </View>
+  );
+};
 
 // ─── You Tab ─────────────────────────────────────────────────────────────────
 
-const YouTab = () => (
-  <ScrollView
-    style={styles.tabScroll}
-    contentContainerStyle={styles.tabScrollContent}
-    showsVerticalScrollIndicator={false}
-  >
-    {/* Progress Overview — topics + hours only */}
-    <View style={styles.section}>
-      <SectionTitle>progress overview</SectionTitle>
-      <View style={styles.statsRow}>
-        <StatCard value={PROFILE_STATS.topicsStudied} label="topics" />
-        <StatCard value={`${PROFILE_STATS.hoursThisWeek}h`} label="hours" />
-      </View>
-    </View>
+const YouTab = ({ navigation }) => {
+  const [history, setHistory] = React.useState(globalState.testHistory);
 
-    {/* Current Learning */}
-    <View style={styles.section}>
-      <SectionTitle>current learning</SectionTitle>
-      <View style={styles.currentLearningCard}>
-        <View style={styles.currentLearningTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.currentSubject}>
-              {CURRENT_TOPIC.subject} › {CURRENT_TOPIC.title}
-            </Text>
-            <Text style={styles.currentSubtitle}>{CURRENT_TOPIC.subtitle}</Text>
+  useFocusEffect(
+    React.useCallback(() => {
+      setHistory([...globalState.testHistory]);
+    }, [])
+  );
+
+  const user = globalState?.user || {
+    name: "User",
+    email: "example@email.com",
+    phone: "",
+    joinDate: "1 Jun 2025"
+  };
+
+  return (
+    <ScrollView
+      style={styles.tabScroll}
+      contentContainerStyle={styles.tabScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Progress Overview — topics + hours only */}
+      <View style={styles.section}>
+        <SectionTitle>progress overview</SectionTitle>
+        <View style={styles.statsRow}>
+          <StatCard value={PROFILE_STATS.topicsStudied} label="topics" />
+          <StatCard value={`${PROFILE_STATS.hoursThisWeek}h`} label="hours" />
+        </View>
+      </View>
+
+      {/* Current Learning */}
+      <View style={styles.section}>
+        <SectionTitle>current learning</SectionTitle>
+        <View style={styles.currentLearningCard}>
+          <View style={styles.currentLearningTop}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.currentSubject}>
+                {CURRENT_TOPIC.subject} › {CURRENT_TOPIC.title}
+              </Text>
+              <Text style={styles.currentSubtitle}>{CURRENT_TOPIC.subtitle}</Text>
+            </View>
+            <Text style={styles.currentPct}>{Math.round(CURRENT_TOPIC.progress * 100)}%</Text>
           </View>
-          <Text style={styles.currentPct}>{Math.round(CURRENT_TOPIC.progress * 100)}%</Text>
+          <ProgressBar progress={CURRENT_TOPIC.progress} height={4} />
         </View>
-        <ProgressBar progress={CURRENT_TOPIC.progress} height={4} />
       </View>
-    </View>
 
-    {/* Learning Insights */}
-    <View style={styles.section}>
-      <SectionTitle actionLabel="view all">learning insights</SectionTitle>
-      {LEARNING_INSIGHTS.map((insight) => (
-        <View key={insight.id} style={styles.insightRow}>
-          <Text style={styles.insightIcon}>{insight.icon}</Text>
-          <Text style={styles.insightText}>{insight.text}</Text>
-        </View>
-      ))}
-    </View>
-
-    {/* Usage This Month */}
-    <View style={styles.section}>
-      <SectionTitle>usage this month</SectionTitle>
-      {USAGE_THIS_MONTH.map((item, i) => (
-        <View key={i} style={styles.usageRow}>
-          <Ionicons name={item.icon} size={16} color={Colors.textMuted} />
-          <Text style={styles.usageLabel}>{item.label}</Text>
-          <Text style={styles.usageCount}>{item.count}</Text>
-        </View>
-      ))}
-    </View>
-
-    {/* Account Info */}
-    <View style={styles.section}>
-      <SectionTitle>account info</SectionTitle>
-      <View style={styles.accountCard}>
-        <InfoRow icon="mail-outline" label="Email" value={USER.email} />
-        <View style={styles.accountDivider} />
-        <InfoRow icon="call-outline" label="Phone" value={USER.phone} />
-        <View style={styles.accountDivider} />
-        <InfoRow icon="calendar-outline" label="Member since" value={USER.joinDate} />
+      {/* Test History */}
+      <View style={styles.section}>
+        <SectionTitle>test history</SectionTitle>
+        {history.length === 0 ? (
+          <View style={styles.emptyStateBox}>
+            <Text style={styles.emptyStateText}>No tests taken yet. Start a quick quiz to track your progress!</Text>
+          </View>
+        ) : (
+          history.map((test) => (
+            <TouchableOpacity 
+              key={test.id} 
+              style={styles.testHistoryRow}
+              onPress={() => navigation.navigate('TestResultDetailScreen', { test })}
+            >
+              <View style={styles.testHistoryInfo}>
+                <Text style={styles.testHistoryTopic}>{test.topic}</Text>
+                <Text style={styles.testHistoryDate}>{test.date}</Text>
+              </View>
+              <View style={styles.testHistoryScoreBox}>
+                <Text style={styles.testHistoryScore}>{test.score}</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </View>
-    </View>
 
-    <View style={{ height: 32 }} />
-  </ScrollView>
-);
+      {/* Learning Insights */}
+      <View style={styles.section}>
+        <SectionTitle actionLabel="view all">learning insights</SectionTitle>
+        {LEARNING_INSIGHTS.map((insight) => (
+          <View key={insight.id} style={styles.insightRow}>
+            <Text style={styles.insightIcon}>{insight.icon}</Text>
+            <Text style={styles.insightText}>{insight.text}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Usage This Month */}
+      <View style={styles.section}>
+        <SectionTitle>usage this month</SectionTitle>
+        {USAGE_THIS_MONTH.map((item, i) => (
+          <View key={i} style={styles.usageRow}>
+            <Ionicons name={item.icon} size={16} color={Colors.textMuted} />
+            <Text style={styles.usageLabel}>{item.label}</Text>
+            <Text style={styles.usageCount}>{item.count}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Account Info */}
+      <View style={styles.section}>
+        <SectionTitle>account info</SectionTitle>
+        <View style={styles.accountCard}>
+          <InfoRow icon="mail-outline" label="Email" value={user.email} />
+          <View style={styles.accountDivider} />
+          <InfoRow icon="call-outline" label="Phone" value={user.phone} />
+          <View style={styles.accountDivider} />
+          <InfoRow icon="calendar-outline" label="Member since" value={user.joinDate || "1 Jun 2025"} />
+        </View>
+      </View>
+
+      <View style={{ height: 32 }} />
+    </ScrollView>
+  );
+};
 
 // ─── Plan Tab ────────────────────────────────────────────────────────────────
 
-const PlanTab = () => {
-  const creditPct = USER.creditsUsed / USER.creditsTotal;
+const PlanTab = ({ navigation }) => {
+  const [currentPlan, setCurrentPlan] = React.useState(globalState.currentPlan);
+  const [credits, setCredits] = React.useState(globalState.credits);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setCurrentPlan(globalState.currentPlan);
+      setCredits(globalState.credits);
+    }, [])
+  );
+
+  let maxCredits = 1000;
+  if (currentPlan === 'Free') maxCredits = 20;
+  else if (currentPlan === 'Learner') maxCredits = 100;
+  else if (currentPlan === 'Scholar') maxCredits = 300;
+  else if (currentPlan === 'Mastery') maxCredits = 1000; // Unlimited effectively
+
+  const creditPct = currentPlan === 'Mastery' ? 1 : Math.min(credits / maxCredits, 1);
 
   return (
     <ScrollView
@@ -131,10 +196,12 @@ const PlanTab = () => {
         <View style={styles.planCard}>
           <View style={styles.planRow}>
             <View>
-              <Text style={styles.planName}>{USER.plan}</Text>
-              <Text style={styles.planDetail}>✕ 1,000 credits / month</Text>
+              <Text style={styles.planName}>SideNote {currentPlan}</Text>
+              <Text style={styles.planDetail}>
+                {currentPlan === 'Mastery' ? '∞ credits / month' : `✕ ${maxCredits} credits / month`}
+              </Text>
             </View>
-            <TouchableOpacity style={styles.upgradeBtn}>
+            <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('PaywallScreen')}>
               <Text style={styles.upgradeBtnText}>Upgrade</Text>
             </TouchableOpacity>
           </View>
@@ -142,9 +209,9 @@ const PlanTab = () => {
           {/* Credits bar */}
           <View style={styles.creditsSection}>
             <View style={styles.creditsRow}>
-              <Text style={styles.creditsLabel}>credits used</Text>
+              <Text style={styles.creditsLabel}>credits available</Text>
               <Text style={styles.creditsValue}>
-                {USER.creditsUsed} / {USER.creditsTotal}
+                {currentPlan === 'Mastery' ? 'Unlimited' : `${credits} / ${maxCredits}`}
               </Text>
             </View>
             <ProgressBar progress={creditPct} height={5} style={{ marginTop: 8 }} />
@@ -164,7 +231,7 @@ const PlanTab = () => {
           <Text style={styles.creditsNudgeSubtext}>
             Upgrade your plan or buy add-on packs.
           </Text>
-          <TouchableOpacity style={styles.nudgeBtn}>
+          <TouchableOpacity style={styles.nudgeBtn} onPress={() => navigation.navigate('CreditTopupScreen')}>
             <Text style={styles.nudgeBtnText}>View options</Text>
           </TouchableOpacity>
         </View>
@@ -182,6 +249,13 @@ const TABS = ['you', 'plan'];
 const ProfileScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('you');
 
+  const user = globalState?.user || {
+    name: "User",
+    email: "example@email.com",
+    phone: "",
+    joinDate: "1 Jun 2025"
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
@@ -189,15 +263,15 @@ const ProfileScreen = ({ navigation }) => {
       {/* ── PROFILE HEADER ── */}
       <View style={styles.profileHeader}>
         <View style={styles.avatarLarge}>
-          <Text style={styles.avatarInitial}>{USER.name.charAt(0)}</Text>
+          <Text style={styles.avatarInitial}>{user.name.charAt(0)}</Text>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.userName}>{USER.name}</Text>
+          <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.userTagline}>keep going, you're doing great ✦</Text>
         </View>
         <TouchableOpacity
           style={styles.settingsBtn}
-          onPress={() => navigation.navigate('Settings')}
+          onPress={() => navigation.navigate('SettingsScreen')}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
@@ -226,7 +300,7 @@ const ProfileScreen = ({ navigation }) => {
       </View>
 
       {/* ── TAB CONTENT ── */}
-      {activeTab === 'you' ? <YouTab /> : <PlanTab />}
+      {activeTab === 'you' ? <YouTab navigation={navigation} /> : <PlanTab navigation={navigation} />}
     </SafeAreaView>
   );
 };
@@ -378,6 +452,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 12,
   },
+
+  // Test History
+  emptyStateBox: { backgroundColor: Colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+  emptyStateText: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center' },
+  testHistoryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, marginBottom: 12 },
+  testHistoryInfo: { gap: 4 },
+  testHistoryTopic: { color: Colors.textPrimary, fontSize: 16, fontWeight: '600' },
+  testHistoryDate: { color: Colors.textMuted, fontSize: 12 },
+  testHistoryScoreBox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  testHistoryScore: { color: Colors.yellow, fontSize: 16, fontWeight: '700' },
 
   // Insights
   insightRow: {

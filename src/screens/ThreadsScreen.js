@@ -21,9 +21,12 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../theme/colors';
 import ProgressBar from '../components/ProgressBar';
-import { THREADS } from '../data/mockData';
+// mockData removed
+import { globalState } from '../data/globalState';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+import Colors from '../theme/colors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -52,97 +55,91 @@ const SUBJECT_COLORS = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Single thread row */
-const ThreadItem = ({ thread, onPress, showProgress = false }) => (
-  <TouchableOpacity
-    style={styles.threadItem}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    {/* Left accent strip coloured by subject */}
-    <View
-      style={[
-        styles.threadAccent,
-        { backgroundColor: SUBJECT_COLORS[thread.subject] ?? Colors.yellow },
-      ]}
-    />
-
-    <View style={styles.threadBody}>
-      {/* Top row: title + timestamp */}
-      <View style={styles.threadTopRow}>
-        <Text style={styles.threadTitle} numberOfLines={1}>
-          {thread.title}
-        </Text>
-        <Text style={styles.threadTime}>{thread.updatedAt}</Text>
-      </View>
-
-      {/* Preview */}
-      <Text style={styles.threadPreview} numberOfLines={2}>
-        {thread.preview}
-      </Text>
-
-      {/* Optional progress bar */}
-      {showProgress && thread.progress != null && (
-        <View style={styles.threadProgressRow}>
-          <ProgressBar
-            progress={thread.progress}
-            height={3}
-            style={styles.threadProgressBar}
-          />
-          <Text style={styles.threadProgressPct}>
-            {Math.round(thread.progress * 100)}%
-          </Text>
-        </View>
-      )}
-    </View>
-
-    {/* Right chevron */}
-    <Ionicons
-      name="chevron-forward"
-      size={14}
-      color={Colors.textMuted}
-      style={styles.threadChevron}
-    />
-  </TouchableOpacity>
-);
-
-/** Section label with optional right action */
-const SectionLabel = ({ label, action, onAction }) => (
-  <View style={styles.sectionHeader}>
-    <Text style={styles.sectionLabel}>{label}</Text>
-    {action && (
-      <TouchableOpacity onPress={onAction} activeOpacity={0.7}>
-        <Text style={styles.sectionAction}>{action}</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
-
-/** Folder chip — collapsible subject group header */
-const FolderRow = ({ subject, count, expanded, onToggle }) => (
-  <TouchableOpacity
-    style={styles.folderRow}
-    onPress={onToggle}
-    activeOpacity={0.75}
-  >
-    <View style={styles.folderLeft}>
+const ThreadItem = ({ thread, onPress, showProgress = false }) => {
+  return (
+    <TouchableOpacity
+      style={styles.threadItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <View
         style={[
-          styles.folderDot,
-          { backgroundColor: SUBJECT_COLORS[subject] ?? Colors.yellow },
+          styles.threadAccent,
+          { backgroundColor: SUBJECT_COLORS[thread.subject] ?? Colors.yellow },
         ]}
       />
-      <Text style={styles.folderLabel}>{subject}</Text>
-      <View style={styles.folderCount}>
-        <Text style={styles.folderCountText}>{count}</Text>
+      <View style={styles.threadBody}>
+        <View style={styles.threadTopRow}>
+          <Text style={styles.threadTitle} numberOfLines={1}>
+            {thread.title}
+          </Text>
+          <Text style={styles.threadTime}>{thread.updatedAt}</Text>
+        </View>
+        <Text style={styles.threadPreview} numberOfLines={2}>
+          {thread.preview}
+        </Text>
+        {showProgress && thread.progress != null && (
+          <View style={styles.threadProgressRow}>
+            <ProgressBar
+              progress={thread.progress}
+              style={styles.threadProgressBar}
+            />
+            <Text style={styles.threadProgressPct}>
+              {Math.round(thread.progress * 100)}%
+            </Text>
+          </View>
+        )}
       </View>
+      <Ionicons
+        name="chevron-forward"
+        size={16}
+        color={Colors.textMuted}
+        style={styles.threadChevron}
+      />
+    </TouchableOpacity>
+  );
+};
+
+const SectionLabel = ({ label, action, onAction }) => {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      {action && (
+        <TouchableOpacity onPress={onAction} activeOpacity={0.7}>
+          <Text style={styles.sectionAction}>{action}</Text>
+        </TouchableOpacity>
+      )}
     </View>
-    <Ionicons
-      name={expanded ? 'chevron-up' : 'chevron-down'}
-      size={14}
-      color={Colors.textMuted}
-    />
-  </TouchableOpacity>
-);
+  );
+};
+
+const FolderRow = ({ subject, count, expanded, onToggle }) => {
+  return (
+    <TouchableOpacity
+      style={styles.folderRow}
+      onPress={onToggle}
+      activeOpacity={0.75}
+    >
+      <View style={styles.folderLeft}>
+        <View
+          style={[
+            styles.folderDot,
+            { backgroundColor: SUBJECT_COLORS[subject] ?? Colors.yellow },
+          ]}
+        />
+        <Text style={styles.folderLabel}>{subject}</Text>
+        <View style={styles.folderCount}>
+          <Text style={styles.folderCountText}>{count}</Text>
+        </View>
+      </View>
+      <Ionicons
+        name={expanded ? 'chevron-up' : 'chevron-down'}
+        size={14}
+        color={Colors.textMuted}
+      />
+    </TouchableOpacity>
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
@@ -153,25 +150,37 @@ const ThreadsScreen = ({ navigation }) => {
 
   const [query, setQuery]               = useState('');
   const [expandedFolders, setExpanded]  = useState({ DSA: true }); // DSA open by default
+  const [chatSessions, setChatSessions] = useState([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setChatSessions(globalState.chatSessions.filter(c => !globalState.deletedChats.includes(c.id)));
+    }, [])
+  );
 
   // ── Derived data ────────────────────────────────────────────────────────
-  const pinned  = useMemo(() => THREADS.filter((t) => t.pinned), []);
-  const folders  = useMemo(() => groupBySubject(THREADS.filter((t) => !t.pinned)), []);
+  const pinned  = useMemo(() => chatSessions.filter((t) => t.bookmarked || t.pinned), [chatSessions]);
+  const folders  = useMemo(() => groupBySubject(chatSessions.filter((t) => !(t.bookmarked || t.pinned))), [chatSessions]);
 
   // Search filters across all threads
   const searchResults = useMemo(() => {
     if (!query.trim()) return null;
     const q = query.toLowerCase();
-    return THREADS.filter(
+    return chatSessions.filter(
       (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.preview.toLowerCase().includes(q) ||
-        t.subject.toLowerCase().includes(q),
+        t.title?.toLowerCase().includes(q) ||
+        t.preview?.toLowerCase().includes(q) ||
+        t.subject?.toLowerCase().includes(q)
     );
-  }, [query]);
+  }, [query, chatSessions]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const openThread = (thread) => navigation.navigate('Chat');
+  const openThread = (thread) => navigation.navigate('Chat', {
+    chatId: thread.id,
+    topicId: thread.topicId,
+    topicTitle: thread.title,
+    isNewChat: false,
+  });
 
   const toggleFolder = (subject) =>
     setExpanded((prev) => ({ ...prev, [subject]: !prev[subject] }));
@@ -185,13 +194,13 @@ const ThreadsScreen = ({ navigation }) => {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Learning Threads</Text>
-          <Text style={styles.headerSub}>{THREADS.length} conversations</Text>
+          <Text style={styles.headerSub}>{chatSessions.length} conversations</Text>
         </View>
 
         {/* New Thread button */}
         <TouchableOpacity
           style={styles.newBtn}
-          onPress={() => navigation.navigate('Chat', { isNew: true })}
+          onPress={() => navigation.navigate('Chat', { isNewChat: true })}
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={18} color="#1C1C1E" />

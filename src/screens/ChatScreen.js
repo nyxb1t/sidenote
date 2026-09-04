@@ -1,12 +1,4 @@
-/**
- * ChatScreen.js  →  Notebook Learning Screen
- *
- * Refactored from a chat UI into a notebook-style learning interface.
- * No FlatList, no chat bubbles, no sender labels.
- * Content flows as sequential notebook blocks inside a ScrollView.
- */
-
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,8 +13,10 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+// Removed NOTEBOOK_CONTENT import
+import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote } from '../data/globalState';
+import DraggableStickyNote from '../components/DraggableStickyNote';
 import Colors from '../theme/colors';
-import { CURRENT_TOPIC, NOTEBOOK_CONTENT } from '../data/mockData';
 
 // ─── Action panel items ────────────────────────────────────────────────────────
 const PANEL_ACTIONS = [
@@ -37,17 +31,141 @@ const PANEL_ACTIONS = [
 const PANEL_COLLAPSED_H = 54;
 const PANEL_EXPANDED_H  = 130;
 
+// ─── Practice MCQ data ─────────────────────────────────────────────────────────
+// Each question: { question, options: [{key, label}], correctKey, explanations: {key} }
+const PRACTICE_QUESTIONS = [
+  {
+    question: 'What is the time complexity of LIS using patience sorting?',
+    options: [
+      { key: 'A', label: 'O(n²)' },
+      { key: 'B', label: 'O(n log n)' },
+      { key: 'C', label: 'O(2ⁿ)' },
+      { key: 'D', label: 'O(n)' },
+    ],
+    correctKey: 'B',
+    explanations: {
+      A: 'O(n²) applies to the naive DP approach — checking every previous element for each position. Patience sorting does better.',
+      B: 'Correct! Patience sorting uses binary search on "piles", so each of the n elements takes O(log n) → total O(n log n).',
+      C: 'O(2ⁿ) would be brute-force enumeration of all subsequences — extremely slow and not how LIS is solved.',
+      D: 'O(n) is not achievable for LIS in the general case. Even reading the input is O(n), but finding the LIS requires O(n log n).',
+    },
+  },
+  {
+    question: 'Which data structure is best for implementing a priority queue?',
+    options: [
+      { key: 'A', label: 'Array' },
+      { key: 'B', label: 'Linked List' },
+      { key: 'C', label: 'Heap' },
+      { key: 'D', label: 'Stack' },
+    ],
+    correctKey: 'C',
+    explanations: {
+      A: 'An array gives O(n) for insertion or extraction of the min/max. A heap is much more efficient.',
+      B: 'A sorted linked list gives O(n) insertion and O(1) extraction — still not optimal.',
+      C: 'Correct! A heap gives O(log n) insertion and O(log n) extraction, making it the standard choice for priority queues.',
+      D: 'A stack is LIFO — it has no concept of priority. It cannot serve as a priority queue.',
+    },
+  },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
 // ─────────────────────────────────────────────────────────────────────────────
 const ChatScreen = ({ navigation, route }) => {
-  const isNew = route?.params?.isNew ?? false;
-  const insets           = useSafeAreaInsets();
-  const scrollRef        = useRef(null);
-  const [inputText, setInputText]   = useState('');
-  const [bookmarked, setBookmarked] = useState(false);
-  const [panelOpen, setPanelOpen]   = useState(false);
-  const [userNotes, setUserNotes]   = useState([]);
+  const { chatId, topicId, topicTitle, isNewChat, isNew: routeIsNew } = route?.params || {};
+
+  // ── Resolve or create chat session ──────────────────────────────────────
+  // Rules (strict, no fallback auto-creation or navigation):
+  //   IF chatId        → load that exact session
+  //   ELSE IF isNewChat/isNew → create a new session for the topic
+  //   ELSE IF topicId/topicTitle → load most recent session for the topic
+  //   ELSE             → no session (empty state, user must go back to Threads)
+  const [chatSession, setChatSession] = useState(() => {
+    if (chatId) {
+      const exact = globalState.chatSessions.find(c => c.id === chatId);
+      if (exact) return exact;
+    }
+    if (routeIsNew || isNewChat) {
+      return createChatForTopic({ topicId, topicTitle });
+    }
+    if (topicId || topicTitle) {
+      const existing = getMostRecentChatForTopic(topicId, topicTitle);
+      if (existing) return existing;
+      return createChatForTopic({ topicId, topicTitle });
+    }
+    // No params — show empty state, do NOT navigate away automatically
+    return null;
+  });
+
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef(null);
+  const [inputText, setInputText] = useState('');
+  const [bookmarked, setBookmarked] = useState(chatSession?.bookmarked || false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [stickyNotes, setStickyNotes] = useState([]);
+
+  // ── Unified message list — single source of truth for all chat content ───
+  // Every message has: { id, type, timestamp, ...typeSpecificFields }
+  // type: 'block' | 'userNote' | 'visual' | 'practice'
+  const [messages, setMessages] = useState(() => {
+    const initialBlocks = chatSession?.blocks || [];
+    const initialNotes = chatSession?.userNotes || [];
+    // Convert existing session data to unified message format,
+    // preserving their original order (blocks first, then notes)
+    const blockMessages = initialBlocks.map((block, i) => ({
+      id: block.id || ('init-block-' + i),
+      type: 'block',
+      timestamp: i, // ordinal for initial load; real actions use Date.now()
+      block,
+    }));
+    const noteMessages = initialNotes.map((note, i) => ({
+      id: note.id || ('init-note-' + i),
+      type: 'userNote',
+      timestamp: initialBlocks.length + i,
+      text: note.text,
+    }));
+    return [...blockMessages, ...noteMessages];
+  });
+
+  // ── Re-sync session when route params change (e.g. navigating to a new chat)
+  // This effect only runs when params actually change — it does NOT auto-redirect.
+  useEffect(() => {
+    // Skip if no params were passed at all
+    if (!chatId && !topicId && !topicTitle && !isNewChat && !routeIsNew) return;
+
+    let session;
+    if (chatId) {
+      session = globalState.chatSessions.find(c => c.id === chatId);
+    }
+    if (!session && (topicId || topicTitle)) {
+      if (routeIsNew || isNewChat) {
+        session = createChatForTopic({ topicId, topicTitle });
+      } else {
+        session = getMostRecentChatForTopic(topicId, topicTitle);
+        if (!session) session = createChatForTopic({ topicId, topicTitle });
+      }
+    }
+    if (session) {
+      setChatSession(session);
+      setBookmarked(session.bookmarked || false);
+      // Re-seed unified messages from session (order: blocks → notes)
+      const sessionBlocks = session.blocks || [];
+      const sessionNotes = session.userNotes || [];
+      const blockMsgs = sessionBlocks.map((block, i) => ({
+        id: block.id || ('init-block-' + i),
+        type: 'block',
+        timestamp: i,
+        block,
+      }));
+      const noteMsgs = sessionNotes.map((note, i) => ({
+        id: note.id || ('init-note-' + i),
+        type: 'userNote',
+        timestamp: sessionBlocks.length + i,
+        text: note.text,
+      }));
+      setMessages([...blockMsgs, ...noteMsgs]);
+    }
+  }, [chatId, topicId, topicTitle, isNewChat, routeIsNew]);
 
   // Animated value for panel height
   const panelAnim = useRef(new Animated.Value(PANEL_COLLAPSED_H)).current;
@@ -75,25 +193,126 @@ const ChatScreen = ({ navigation, route }) => {
     }).start();
   }, [panelOpen, panelAnim]);
 
-  // ── Handle panel action ──────────────────────────────────────────────────
+  // ── Handle panel action — APPEND-ONLY to messages ────────────────────────
   const handlePanelAction = (id) => {
     collapsePanel();
-    // extend with real logic per action
+    if (id === 'note') {
+      setStickyNotes(prev => [...prev, { id: Date.now().toString(), text: '' }]);
+    } else if (id === 'visual') {
+      setMessages(prev => [
+        ...prev,
+        { id: 'visual-' + Date.now(), type: 'visual', timestamp: Date.now() },
+      ]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    } else if (id === 'practice') {
+      const q = PRACTICE_QUESTIONS[Math.floor(Math.random() * PRACTICE_QUESTIONS.length)];
+      setMessages(prev => [
+        ...prev,
+        {
+          id: 'practice-' + Date.now(),
+          type: 'practice',
+          timestamp: Date.now(),
+          question: q.question,
+          options: q.options,
+          correctKey: q.correctKey,
+          explanations: q.explanations,
+        },
+      ]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    } else if (id === 'examples') {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: 'b-ex-' + Date.now(),
+          type: 'block',
+          timestamp: Date.now(),
+          block: {
+            id: 'b-ex-' + Date.now(),
+            type: 'think',
+            question: 'Example: Fibonacci sequence',
+            hint: 'Another classical use case for DP.',
+            answer: 'fib(n) = fib(n-1) + fib(n-2). Instead of recomputing, store the values in an array.',
+          },
+        },
+      ]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    } else if (id === 'retry') {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: 'b-re-' + Date.now(),
+          type: 'block',
+          timestamp: Date.now(),
+          block: {
+            id: 'b-re-' + Date.now(),
+            type: 'paragraph',
+            text: "Let me explain that differently: Memoisation is just caching. Imagine if you had to recalculate 12 × 12 every time someone asked you. Instead, you just memorize it. That's memoisation.",
+          },
+        },
+      ]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    }
+  };
+
+  const removeStickyNote = (id) => {
+    setStickyNotes(prev => prev.filter(note => note.id !== id));
   };
 
   // ── Inline content actions ────────────────────────────────────────────────
   const handleInlineAction = (label) => {
-    // placeholder — wire up to your AI/content layer
+    // placeholder
   };
 
-  // ── Send note / question ─────────────────────────────────────────────────
+  // ── Send note / question — APPEND-ONLY to messages ───────────────────────
   const sendNote = () => {
     const text = inputText.trim();
     if (!text) return;
-    setUserNotes((prev) => [...prev, { id: Date.now().toString(), text }]);
+    const msgId = Date.now().toString();
+    const newNote = { id: msgId, text };
+    if (chatSession?.id) {
+      saveChatNote(chatSession.id, newNote);
+    }
+    setMessages(prev => [
+      ...prev,
+      { id: msgId, type: 'userNote', timestamp: Date.now(), text },
+    ]);
     setInputText('');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
   };
+
+  // ── Evaluate MCQ answer — appends evaluation message AFTER the question ───
+  const handleEvaluate = (practiceId, { selectedKey, correctKey, explanations }) => {
+    const isCorrect = selectedKey === correctKey;
+    const explanation = explanations[selectedKey];
+    const correctLabel = explanations[correctKey];
+
+    let feedbackHeader, feedbackBody;
+    if (isCorrect) {
+      feedbackHeader = '✓ Nice, that\'s correct.';
+      feedbackBody = explanation;
+    } else {
+      feedbackHeader = '✗ Not quite — here\'s why:';
+      feedbackBody = `You chose ${selectedKey}: ${explanation}\n\nThe correct answer is ${correctKey}: ${correctLabel}`;
+    }
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: 'eval-' + Date.now(),
+        type: 'evaluation',
+        timestamp: Date.now(),
+        result: isCorrect ? 'correct' : 'incorrect',
+        selected: selectedKey,
+        correct: correctKey,
+        feedbackHeader,
+        feedbackBody,
+        practiceId, // links this evaluation back to its question card
+      },
+    ]);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+  };
+
+  const isThreadEmpty = messages.length === 0;
 
   // ── Opacity interpolation for labels (collapsed → expanded) ──────────────
   const labelOpacity = panelAnim.interpolate({
@@ -122,15 +341,23 @@ const ChatScreen = ({ navigation, route }) => {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{CURRENT_TOPIC.title}</Text>
-          <Text style={styles.headerSubtitle}>
-            {CURRENT_TOPIC.subject} · Memoisation
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {chatSession?.title || 'Unknown Topic'}
+          </Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {chatSession?.subject || 'Study'} · {chatSession?.subtitle || 'Notes'}
           </Text>
         </View>
 
         <TouchableOpacity
           style={styles.headerIconBtn}
-          onPress={() => setBookmarked((b) => !b)}
+          onPress={() => {
+            setBookmarked((b) => {
+              const next = !b;
+              if (chatSession) chatSession.bookmarked = next;
+              return next;
+            });
+          }}
           activeOpacity={0.7}
         >
           <Ionicons
@@ -143,6 +370,16 @@ const ChatScreen = ({ navigation, route }) => {
 
       {/* Subtle divider */}
       <View style={styles.dividerTop} />
+
+      {/* ── STICKY NOTES OVERLAY ── */}
+      {stickyNotes.map(note => (
+        <DraggableStickyNote 
+          key={note.id} 
+          id={note.id} 
+          initialText={note.text} 
+          onClose={removeStickyNote} 
+        />
+      ))}
 
       {/* ── KEYBOARD AVOIDING WRAPPER ── */}
       <KeyboardAvoidingView
@@ -165,7 +402,7 @@ const ChatScreen = ({ navigation, route }) => {
           scrollEventThrottle={16}
         >
           {/* ─── Empty state for new thread ─── */}
-          {isNew ? (
+          {isThreadEmpty ? (
             <View style={styles.emptyThread}>
               <Text style={styles.emptyThreadIcon}>✦</Text>
               <Text style={styles.emptyThreadTitle}>New learning thread</Text>
@@ -174,22 +411,68 @@ const ChatScreen = ({ navigation, route }) => {
               </Text>
             </View>
           ) : (
-            /* ─── Existing thread: render notebook blocks ─── */
-            NOTEBOOK_CONTENT.map((block) => (
-              <NotebookBlock
-                key={block.id}
-                block={block}
-                onInlineAction={handleInlineAction}
-              />
-            ))
+            /* ─── Unified chronological message list ─── */
+            messages.map((msg) => {
+              if (msg.type === 'block') {
+                return (
+                  <NotebookBlock
+                    key={msg.id}
+                    block={msg.block}
+                    onInlineAction={handleInlineAction}
+                  />
+                );
+              }
+              if (msg.type === 'userNote') {
+                return (
+                  <View key={msg.id} style={styles.userNote}>
+                    <Text style={styles.userNoteText}>{msg.text}</Text>
+                  </View>
+                );
+              }
+              if (msg.type === 'visual') {
+                return (
+                  <View key={msg.id} style={styles.visualMockContainer}>
+                    <View style={styles.visualMockVideo}>
+                      <Ionicons name="play-circle" size={48} color={Colors.yellow} />
+                      <Text style={styles.visualMockText}>Visual Explanation Playing...</Text>
+                    </View>
+                  </View>
+                );
+              }
+              if (msg.type === 'practice') {
+                return (
+                  <PracticeCard
+                    key={msg.id}
+                    msg={msg}
+                    onEvaluate={handleEvaluate}
+                    // Freeze the card if an evaluation for this question already exists
+                    evaluated={messages.some(m => m.type === 'evaluation' && m.practiceId === msg.id)}
+                  />
+                );
+              }
+              if (msg.type === 'evaluation') {
+                const isCorrect = msg.result === 'correct';
+                return (
+                  <View
+                    key={msg.id}
+                    style={[
+                      styles.evaluationCard,
+                      isCorrect ? styles.evaluationCorrect : styles.evaluationIncorrect,
+                    ]}
+                  >
+                    <Text style={[
+                      styles.evaluationHeader,
+                      isCorrect ? styles.evaluationHeaderCorrect : styles.evaluationHeaderIncorrect,
+                    ]}>
+                      {msg.feedbackHeader}
+                    </Text>
+                    <Text style={styles.evaluationBody}>{msg.feedbackBody}</Text>
+                  </View>
+                );
+              }
+              return null;
+            })
           )}
-
-          {/* ─── User-appended notes ─── */}
-          {userNotes.map((note) => (
-            <View key={note.id} style={styles.userNote}>
-              <Text style={styles.userNoteText}>{note.text}</Text>
-            </View>
-          ))}
         </ScrollView>
 
         {/* ── FIXED BOTTOM ── */}
@@ -266,6 +549,9 @@ const ChatScreen = ({ navigation, route }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
+    
+      
+
     </SafeAreaView>
   );
 };
@@ -451,7 +737,71 @@ const NotebookBlock = ({ block, onInlineAction }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Notebook block styles
+// PracticeCard — interactive MCQ with selection + submit + freeze-after-submit
+// ─────────────────────────────────────────────────────────────────────────────
+const PracticeCard = ({ msg, onEvaluate, evaluated }) => {
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  const isLocked = submitted || evaluated;
+
+  const handleSubmit = () => {
+    if (!selectedKey || isLocked) return;
+    setSubmitted(true);
+    onEvaluate(msg.id, {
+      selectedKey,
+      correctKey: msg.correctKey,
+      explanations: msg.explanations,
+    });
+  };
+
+  return (
+    <View style={styles.practiceMockContainer}>
+      <Text style={styles.practiceTitle}>Practice: Quick Quiz</Text>
+      <Text style={styles.practiceQuestion}>{msg.question}</Text>
+
+      {msg.options.map((opt) => {
+        const isSelected = selectedKey === opt.key;
+        return (
+          <TouchableOpacity
+            key={opt.key}
+            style={[
+              styles.practiceOption,
+              isSelected && styles.practiceOptionSelected,
+              isLocked && styles.practiceOptionLocked,
+            ]}
+            onPress={() => !isLocked && setSelectedKey(opt.key)}
+            activeOpacity={isLocked ? 1 : 0.7}
+          >
+            <View style={styles.practiceOptionRow}>
+              <View style={[styles.practiceOptionBadge, isSelected && styles.practiceOptionBadgeSelected]}>
+                <Text style={[styles.practiceOptionBadgeText, isSelected && styles.practiceOptionBadgeTextSelected]}>
+                  {opt.key}
+                </Text>
+              </View>
+              <Text style={[styles.practiceOptionText, isSelected && styles.practiceOptionTextSelected]}>
+                {opt.label}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+
+      {!isLocked && (
+        <TouchableOpacity
+          style={[styles.practiceSubmitBtn, !selectedKey && styles.practiceSubmitBtnDisabled]}
+          onPress={handleSubmit}
+          activeOpacity={selectedKey ? 0.8 : 1}
+        >
+          <Text style={[styles.practiceSubmitText, !selectedKey && styles.practiceSubmitTextDisabled]}>
+            Submit Answer
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 const nb = StyleSheet.create({
   block: {
@@ -799,6 +1149,154 @@ const styles = StyleSheet.create({
   sendBtnActive: {
     backgroundColor: Colors.yellow,
     borderColor: Colors.yellow,
+  },
+  visualMockContainer: {
+    marginTop: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  visualMockVideo: {
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  visualMockText: {
+    marginTop: 10,
+    color: Colors.textSecondary,
+    fontSize: 14,
+  },
+  practiceMockContainer: {
+    marginTop: 20,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(232,212,77,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,212,77,0.3)',
+  },
+  practiceTitle: {
+    color: Colors.yellow,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  practiceQuestion: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  practiceOption: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    marginBottom: 8,
+  },
+  practiceOptionSelected: {
+    borderColor: Colors.yellow,
+    backgroundColor: 'rgba(232,212,77,0.1)',
+  },
+  practiceOptionLocked: {
+    opacity: 0.7,
+  },
+  practiceOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  practiceOptionBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  practiceOptionBadgeSelected: {
+    borderColor: Colors.yellow,
+    backgroundColor: 'rgba(232,212,77,0.2)',
+  },
+  practiceOptionBadgeText: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  practiceOptionBadgeTextSelected: {
+    color: Colors.yellow,
+  },
+  practiceOptionText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    flex: 1,
+  },
+  practiceOptionTextSelected: {
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+
+  // ── Submit button ─────────────────────────────────────────────────────────
+  practiceSubmitBtn: {
+    marginTop: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: Colors.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  practiceSubmitBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  practiceSubmitText: {
+    color: '#1C1C1E',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  practiceSubmitTextDisabled: {
+    color: Colors.textMuted,
+  },
+
+  // ── Evaluation card ───────────────────────────────────────────────────────
+  evaluationCard: {
+    marginTop: 4,
+    marginBottom: 20,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  evaluationCorrect: {
+    backgroundColor: 'rgba(52,199,89,0.07)',
+    borderColor: 'rgba(52,199,89,0.3)',
+  },
+  evaluationIncorrect: {
+    backgroundColor: 'rgba(255,69,58,0.07)',
+    borderColor: 'rgba(255,69,58,0.25)',
+  },
+  evaluationHeader: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  evaluationHeaderCorrect: {
+    color: '#34C759',
+  },
+  evaluationHeaderIncorrect: {
+    color: '#FF453A',
+  },
+  evaluationBody: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 22,
   },
 });
 
