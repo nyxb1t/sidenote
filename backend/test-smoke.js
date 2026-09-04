@@ -5,11 +5,13 @@
  *
  * Standalone smoke test for the SideNote Intelligence Layer.
  *
- * Runs two tests:
+ * Runs four tests:
  *   Test 1 — Normal path:   Gemini responds → print returned lesson JSON.
  *   Test 2 — Forced fallback: GEMINI_API_KEY is corrupted in memory → Gemini
  *             fails → Groq fallback responds → print returned lesson JSON →
  *             original key is restored.
+ *   Test 3 — validateLesson rejects invalid input (no AI call).
+ *   Test 4 — validateQuiz rejects invalid input (no AI call).
  *
  * Usage:
  *   node backend/test-smoke.js
@@ -27,32 +29,38 @@ const { validateLesson }   = require('./ai/validators/lessonValidator');
 const { validateQuiz }     = require('./ai/validators/quizValidator');
 const { ValidationError }  = require('./ai/validators/ValidationError');
 
-// ─── Sample learner model ─────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const SAMPLE_LEARNER = {
-  userId:          'smoke-test-user-001',
-  goal:            'Crack GATE CS 2025',
-  knownTopics:     ['Arrays & Strings', 'Sorting Algorithms'],
-  weakAreas:       ['Recursion', 'Dynamic Programming'],
-  preferredStyle:  'visual',
-  mastery: {
-    overall:  0.45,
-    byTopic: {
+const TOPIC = 'Recursion';
+
+// ─── Sample learner context (longterm memory tier) ────────────────────────────
+
+const SAMPLE_LEARNER_CONTEXT = {
+  memoryType: 'longterm',
+  learnerProfile: {
+    goal:            'Crack GATE CS 2025',
+    knownTopics:     ['Arrays & Strings', 'Sorting Algorithms'],
+    weakAreas:       ['Recursion', 'Dynamic Programming'],
+    masteryByTopic: {
       'Arrays & Strings':   0.85,
       'Sorting Algorithms': 0.80,
       'Recursion':          0.28,
     },
+    preferredStyle:  'visual',
+    mistakePatterns: [
+      'Confuses base case',
+      'Confuses call stack depth with recursion depth',
+    ],
   },
-  mistakePatterns: [
-    'Struggles to identify base cases',
-    'Confuses call stack depth with recursion depth',
-  ],
-  lastStrategy:    null,
-  examDate:        '2025-02-02',
-  sessionCount:    7,
 };
 
-const TOPIC = 'Recursion';
+// ─── Sample user context (entitlement) ────────────────────────────────────────
+
+const USER_CONTEXT = {
+  userId:           'smoke-test-user',
+  plan:             'pro',
+  creditsRemaining: 100,
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,9 +94,9 @@ async function runTest1() {
   console.log(`Model:  ${process.env.GEMINI_MODEL ?? '(not set)'}`);
 
   try {
-    const lesson = await generateLesson(TOPIC, SAMPLE_LEARNER);
+    const lesson = await generateLesson(TOPIC, SAMPLE_LEARNER_CONTEXT, USER_CONTEXT);
     printResult('generateLesson succeeded', lesson);
-    return lesson; // Return so Test 3 can use it
+    return lesson; // Return so downstream tests can use it if needed
   } catch (err) {
     printError('generateLesson failed', err);
     return null;
@@ -111,9 +119,12 @@ async function runTest2() {
     console.log('\n  → GEMINI_API_KEY corrupted in memory for this test.');
 
     const lesson = await generateLesson(TOPIC, {
-      ...SAMPLE_LEARNER,
-      lastStrategy: 'visual', // ensure strategy rotation is exercised
-    });
+      ...SAMPLE_LEARNER_CONTEXT,
+      learnerProfile: {
+        ...SAMPLE_LEARNER_CONTEXT.learnerProfile,
+        preferredStyle: 'analogy', // exercise a different style for strategy rotation
+      },
+    }, USER_CONTEXT);
 
     printResult('generateLesson succeeded via Groq fallback', lesson);
 
@@ -279,4 +290,3 @@ main().catch((err) => {
   console.error('\nUnexpected top-level error:', err);
   process.exit(1);
 });
-

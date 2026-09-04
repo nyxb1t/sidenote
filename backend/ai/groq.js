@@ -82,6 +82,7 @@ async function callGroq(prompt) {
         },
       ],
       temperature: 0.7,
+      response_format: { type: 'json_object' },
     });
 
     const text = completion.choices?.[0]?.message?.content ?? '';
@@ -90,8 +91,16 @@ async function callGroq(prompt) {
       throw new SyntaxError('Groq returned an empty response.');
     }
 
+    // Strip markdown code fences if the model wrapped its response.
+    let cleaned = text.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*\n?/, '')
+        .replace(/\n?\s*```\s*$/, '');
+    }
+
     // Parse and validate that the response is a JSON object.
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleaned);
     if (typeof parsed !== 'object' || parsed === null) {
       throw new SyntaxError('Response parsed to a non-object value.');
     }
