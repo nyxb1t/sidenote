@@ -1,11 +1,11 @@
 /**
- * ChatsStack.js
+ * ChatStack.js
  *
- * Stack navigator for the "Chats" tab.
- * ThreadsScreen (index) → ChatScreen (detail)
+ * Stack navigator for the "Chat" tab.
+ * Threads (default) → Chat (detail)
  *
- * This lets the tab bar persist across both screens while still allowing
- * navigation.goBack() in ChatScreen to pop back to the threads list.
+ * unmountOnBlur is set on this tab in BottomTabNavigator so the stack
+ * always resets to Threads whenever the user re-taps the Chat tab icon.
  */
 
 import React from 'react';
@@ -16,11 +16,14 @@ import ChatScreen    from '../screens/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 
-const ChatsStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+const ChatStack = () => (
+  <Stack.Navigator
+    initialRouteName="Threads"
+    screenOptions={{ headerShown: false }}
+  >
     <Stack.Screen name="Threads" component={ThreadsScreen} />
     <Stack.Screen name="Chat"    component={ChatScreen}    />
   </Stack.Navigator>
 );
 
-export default ChatsStack;
+export default ChatStack;

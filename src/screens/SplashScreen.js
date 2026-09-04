@@ -6,153 +6,219 @@ import {
   Animated,
   TouchableOpacity,
   StatusBar,
-  Dimensions,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { useFonts, Caveat_700Bold } from '@expo-google-fonts/caveat';
 import Colors from '../theme/colors';
 
-const { width, height } = Dimensions.get('window');
+const SplashScreen = ({ navigation }) => {
+  const [fontsLoaded] = useFonts({
+    Caveat_700Bold,
+  });
 
-const SplashScreen = ({ onDone }) => {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.88)).current;
-  const subtitleOpacity = useRef(new Animated.Value(0)).current;
+  const iconOpacity = useRef(new Animated.Value(0)).current;
+  const iconScale = useRef(new Animated.Value(0.9)).current;
+  const iconFlip = useRef(new Animated.Value(0)).current;
+  const iconGlow = useRef(new Animated.Value(0)).current;
+  
+  const textWidth = useRef(new Animated.Value(0)).current;
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.sequence([
-      // Logo entrance
-      Animated.parallel([
-        Animated.timing(opacity, {
+    if (fontsLoaded) {
+      Animated.sequence([
+        // 1. App Icon Entry: Fade + Scale up
+        Animated.parallel([
+          Animated.timing(iconOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.spring(iconScale, {
+            toValue: 1.0,
+            friction: 8,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+        ]),
+
+        // 2. Icon Micro-Animation: Pulse Glow + Subtle Flip
+        Animated.parallel([
+          // Soft glow pulse
+          Animated.sequence([
+            Animated.timing(iconGlow, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(iconGlow, {
+              toValue: 0.2, // leave a slight glow
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
+          // Subtle flip/wobble
+          Animated.sequence([
+            Animated.timing(iconFlip, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+            Animated.timing(iconFlip, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+
+        // 3. Brand Name: Handwritten stroke drawing (mask reveal)
+        Animated.timing(textWidth, {
+          toValue: 200,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+
+        // 4. Final State: Delay then button fade in
+        Animated.delay(800),
+        Animated.timing(buttonOpacity, {
           toValue: 1,
-          duration: 700,
+          duration: 600,
           useNativeDriver: true,
         }),
-        Animated.spring(scale, {
-          toValue: 1,
-          tension: 60,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]),
-      // Tagline fade in
-      Animated.timing(subtitleOpacity, {
-        toValue: 1,
-        duration: 500,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-      // CTA fade in
-      Animated.timing(buttonOpacity, {
-        toValue: 1,
-        duration: 400,
-        delay: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+      ]).start();
+    }
+  }, [fontsLoaded, iconOpacity, iconScale, iconFlip, iconGlow, textWidth, buttonOpacity]);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.fallbackContainer}>
+         <StatusBar barStyle="light-content" backgroundColor="#0F0F10" />
+      </View>
+    );
+  }
+
+  const flipInterpolate = iconFlip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '15deg'],
+  });
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
-
-      {/* Subtle background glow */}
-      <View style={styles.glow} />
-
+      <StatusBar barStyle="light-content" backgroundColor="#0F0F10" />
+      
       <View style={styles.centerContent}>
-        {/* Logo */}
-        <Animated.View style={{ opacity, transform: [{ scale }] }}>
-          <Text style={styles.logo}>sidenote</Text>
-          <View style={styles.logoUnderline} />
+        {/* Glow behind the icon */}
+        <Animated.View style={[
+          styles.glowBackground,
+          { opacity: iconGlow, transform: [{ scale: iconScale }] }
+        ]} />
+
+        {/* Notebook Icon */}
+        <Animated.View style={{ 
+          opacity: iconOpacity,
+          transform: [
+            { scale: iconScale },
+            { rotateY: flipInterpolate }
+          ],
+          marginBottom: 16,
+        }}>
+          <Feather name="book-open" size={48} color={Colors.yellow} />
         </Animated.View>
 
-        {/* Tagline */}
-        <Animated.Text style={[styles.tagline, { opacity: subtitleOpacity }]}>
-          your AI study partner
-        </Animated.Text>
+        {/* Handwritten Text */}
+        <View style={styles.textWrapper}>
+          <Animated.View style={[styles.maskView, { width: textWidth }]}>
+            <Text style={styles.logoText}>sidenote</Text>
+          </Animated.View>
+        </View>
       </View>
 
-      {/* CTA */}
+      {/* Primary CTA */}
       <Animated.View style={[styles.ctaContainer, { opacity: buttonOpacity }]}>
-        <TouchableOpacity style={styles.ctaButton} onPress={onDone} activeOpacity={0.8}>
-          <Text style={styles.ctaText}>Get started</Text>
+        <TouchableOpacity 
+          style={styles.ctaButton} 
+          onPress={() => navigation.replace('AuthChoiceScreen')} 
+          activeOpacity={0.8}
+        >
+          <Text style={styles.ctaText}>Get Started</Text>
         </TouchableOpacity>
-        <Text style={styles.ctaSubtext}>Already have an account? <Text style={styles.ctaLink}>Sign in</Text></Text>
       </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  fallbackContainer: {
+    flex: 1,
+    backgroundColor: '#0F0F10',
+  },
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: '#0F0F10',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  glow: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: Colors.yellow,
-    opacity: 0.04,
-    top: height * 0.25,
-    alignSelf: 'center',
   },
   centerContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    marginTop: 60,
   },
-  logo: {
-    color: Colors.textPrimary,
-    fontSize: 48,
-    fontWeight: '700',
-    letterSpacing: -1.5,
-    textAlign: 'center',
-  },
-  logoUnderline: {
-    height: 3,
+  glowBackground: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.yellow,
-    borderRadius: 2,
-    marginTop: 4,
-    width: '60%',
-    alignSelf: 'flex-end',
+    opacity: 0.15,
+    top: -16, // Center behind the icon
+    shadowColor: Colors.yellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  tagline: {
-    color: Colors.textMuted,
-    fontSize: 15,
-    letterSpacing: 0.3,
-    marginTop: 4,
+  textWrapper: {
+    width: 200,
+    alignItems: 'flex-start',
+    height: 70,
+    justifyContent: 'center',
+  },
+  maskView: {
+    overflow: 'hidden',
+    height: 70,
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontFamily: 'Caveat_700Bold',
+    fontSize: 60,
+    color: Colors.yellow,
+    width: 200, 
+    textAlign: 'center',
+    includeFontPadding: false,
+    textShadowColor: 'rgba(232, 212, 77, 0.4)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   ctaContainer: {
     width: '100%',
     paddingHorizontal: 32,
-    paddingBottom: 52,
+    paddingBottom: 60,
     alignItems: 'center',
-    gap: 16,
   },
   ctaButton: {
     width: '100%',
     backgroundColor: Colors.yellow,
-    borderRadius: 14,
-    paddingVertical: 16,
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
   },
   ctaText: {
-    color: '#1C1C1E',
+    color: '#0F0F10',
     fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.2,
-  },
-  ctaSubtext: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
-  ctaLink: {
-    color: Colors.yellow,
-    fontWeight: '600',
+    fontSize: 18,
+    letterSpacing: 0.3,
   },
 });
 

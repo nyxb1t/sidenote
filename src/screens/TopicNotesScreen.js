@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../theme/colors';
 import { TOPIC_NOTES } from '../data/mockData';
+import Colors from '../theme/colors';
 
 // ── Tag pill ──────────────────────────────────────────────────────────────────
 const TAG_COLORS = {
@@ -29,19 +29,21 @@ const TagPill = ({ tag }) => {
 };
 
 // ── Individual note row card ──────────────────────────────────────────────────
-const NoteItem = ({ note, onPress }) => (
-  <TouchableOpacity style={styles.noteCard} onPress={onPress} activeOpacity={0.75}>
-    <View style={styles.noteCardInner}>
-      <View style={styles.noteTop}>
-        <TagPill tag={note.tag} />
-        <Text style={styles.noteTimestamp}>{note.updatedAt}</Text>
+const NoteItem = ({ note, onPress }) => {
+  return (
+    <TouchableOpacity style={styles.noteCard} onPress={onPress} activeOpacity={0.75}>
+      <View style={styles.noteCardInner}>
+        <View style={styles.noteTop}>
+          <TagPill tag={note.tag} />
+          <Text style={styles.noteTimestamp}>{note.updatedAt}</Text>
+        </View>
+        <Text style={styles.noteTitle}>{note.title}</Text>
+        <Text style={styles.notePreview} numberOfLines={2}>{note.preview}</Text>
       </View>
-      <Text style={styles.noteTitle}>{note.title}</Text>
-      <Text style={styles.notePreview} numberOfLines={2}>{note.preview}</Text>
-    </View>
-    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-  </TouchableOpacity>
-);
+      <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+    </TouchableOpacity>
+  );
+};
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 const TopicNotesScreen = ({ route, navigation }) => {
@@ -104,7 +106,7 @@ const TopicNotesScreen = ({ route, navigation }) => {
             <NoteItem
               key={note.id}
               note={note}
-              onPress={() => navigation.navigate('NoteDetail', { note, topic })}
+              onPress={() => navigation.navigate('NoteDetailScreen', { note, topic })}
             />
           ))
         )}

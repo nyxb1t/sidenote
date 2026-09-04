@@ -10,9 +10,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../theme/colors';
 import NoteCard from '../components/NoteCard';
 import { NOTES, SUBJECTS } from '../data/mockData';
+import Colors from '../theme/colors';
 
 const NotesScreen = ({ navigation }) => {
   const [selectedSubject, setSelectedSubject] = useState('All');
@@ -102,7 +102,7 @@ const NotesScreen = ({ navigation }) => {
             <NoteCard
               key={note.id}
               note={note}
-              onPress={() => navigation.navigate('TopicNotes', { topic: note })}
+              onPress={() => navigation.navigate('TopicNotesScreen', { topic: note })}
             />
 
           ))

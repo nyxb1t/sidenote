@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,61 +7,148 @@ import {
   TouchableOpacity,
   Switch,
   StatusBar,
+  TextInput,
+  Modal,
+  Platform,
+  ToastAndroid,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { globalState } from '../data/globalState';
 import Colors from '../theme/colors';
-import { USER } from '../data/mockData';
 
 // ─── Row components ───────────────────────────────────────────────────────────
 
-const SettingsRow = ({ icon, label, value, onPress, showChevron = true }) => (
-  <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
-    <View style={styles.rowLeft}>
-      <Ionicons name={icon} size={17} color={Colors.textMuted} style={styles.rowIcon} />
-      <Text style={styles.rowLabel}>{label}</Text>
-    </View>
-    <View style={styles.rowRight}>
-      {value ? <Text style={styles.rowValue}>{value}</Text> : null}
-      {showChevron && (
-        <Ionicons name="chevron-forward" size={15} color={Colors.border} />
-      )}
-    </View>
-  </TouchableOpacity>
-);
+const SettingsRow = ({ icon, label, value, onPress, showChevron = true }) => {
+  return (
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6} disabled={!onPress}>
+      <View style={styles.rowLeft}>
+        <Ionicons name={icon} size={17} color={Colors.textMuted} style={styles.rowIcon} />
+        <Text style={styles.rowLabel}>{label}</Text>
+      </View>
+      <View style={styles.rowRight}>
+        {value ? <Text style={styles.rowValue}>{value}</Text> : null}
+        {showChevron && onPress && (
+          <Ionicons name="chevron-forward" size={15} color={Colors.border} />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
-const ToggleRow = ({ icon, label, value, onToggle }) => (
-  <View style={styles.row}>
-    <View style={styles.rowLeft}>
-      <Ionicons name={icon} size={17} color={Colors.textMuted} style={styles.rowIcon} />
-      <Text style={styles.rowLabel}>{label}</Text>
+const ToggleRow = ({ icon, label, value, onToggle }) => {
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowLeft}>
+        <Ionicons name={icon} size={17} color={Colors.textMuted} style={styles.rowIcon} />
+        <Text style={styles.rowLabel}>{label}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        trackColor={{ false: Colors.border, true: Colors.yellow + '80' }}
+        thumbColor={value ? Colors.yellow : Colors.textMuted}
+        ios_backgroundColor={Colors.border}
+      />
     </View>
-    <Switch
-      value={value}
-      onValueChange={onToggle}
-      trackColor={{ false: Colors.border, true: Colors.yellow + '80' }}
-      thumbColor={value ? Colors.yellow : Colors.textMuted}
-      ios_backgroundColor={Colors.border}
-    />
-  </View>
-);
+  );
+};
 
-const SectionGroup = ({ title, children }) => (
-  <View style={styles.group}>
-    <Text style={styles.groupTitle}>{title}</Text>
-    <View style={styles.groupCard}>{children}</View>
-  </View>
-);
+const SectionGroup = ({ title, children, actionLabel, onAction }) => {
+  return (
+    <View style={styles.group}>
+      <View style={styles.groupHeader}>
+        <Text style={styles.groupTitle}>{title}</Text>
+        {actionLabel && (
+          <TouchableOpacity onPress={onAction}>
+            <Text style={styles.groupAction}>{actionLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <View style={styles.groupCard}>{children}</View>
+    </View>
+  );
+};
 
-const GroupDivider = () => <View style={styles.divider} />;
+const GroupDivider = () => {
+  return <View style={styles.divider} />;
+};
 
 // ─── Settings Screen ──────────────────────────────────────────────────────────
 
 const SettingsScreen = ({ navigation }) => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [preferredStyle, setPreferredStyle] = useState('visual');
+  const [isEditing, setIsEditing] = useState(false);
+  
+  const user = globalState?.user || {
+    name: "User",
+    email: "example@email.com",
+    phone: ""
+  };
+
+  const [editForm, setEditForm] = useState({
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+  });
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
 
   const learningStyles = ['visual', 'examples', 'text'];
+
+  const handleThemeToggle = () => {
+    // Theme toggle coming soon
+    Alert.alert('Coming Soon', 'Theme switching will be available in a future update.');
+  };
+
+  const hasChanges = () => {
+    return (
+      editForm.name !== user.name ||
+      editForm.email !== user.email ||
+      editForm.phone !== user.phone
+    );
+  };
+
+  const handleSaveClick = () => {
+    if (!hasChanges()) {
+      setIsEditing(false);
+      return;
+    }
+    setShowPasswordModal(true);
+    setPasswordInput('');
+  };
+
+  const handleConfirmSave = () => {
+    if (!passwordInput.trim()) {
+      if (Platform.OS === 'android') ToastAndroid.show('Password required', ToastAndroid.SHORT);
+      else Alert.alert('Error', 'Password required');
+      return;
+    }
+    
+    // Simulate save
+    setTimeout(() => {
+      globalState.user = { ...editForm };
+      setShowPasswordModal(false);
+      setIsEditing(false);
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Account updated', ToastAndroid.SHORT);
+      } else {
+        Alert.alert('Success', 'Account updated');
+      }
+    }, 500);
+  };
+
+  const handleCancel = () => {
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+    });
+    setIsEditing(false);
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -87,37 +174,98 @@ const SettingsScreen = ({ navigation }) => {
       >
 
         {/* ── Account Settings ── */}
-        <SectionGroup title="Account">
-          <SettingsRow
-            icon="mail-outline"
-            label="Email"
-            value={USER.email}
-            showChevron={false}
-          />
-          <GroupDivider />
-          <SettingsRow
-            icon="call-outline"
-            label="Phone"
-            value={USER.phone}
-            showChevron={false}
-          />
-          <GroupDivider />
-          <SettingsRow
-            icon="lock-closed-outline"
-            label="Change password"
-            onPress={() => {}}
-          />
+        <SectionGroup 
+          title="Account Settings" 
+          actionLabel={isEditing ? "Cancel" : "Edit"} 
+          onAction={isEditing ? handleCancel : () => setIsEditing(true)}
+        >
+          {isEditing ? (
+            <View style={styles.editForm}>
+              <View style={styles.editRow}>
+                <Ionicons name="person-outline" size={17} color={Colors.textMuted} style={styles.rowIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={editForm.name}
+                  onChangeText={v => setEditForm({...editForm, name: v})}
+                  placeholder="Name"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Ionicons name="mail-outline" size={17} color={Colors.textMuted} style={styles.rowIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={editForm.email}
+                  onChangeText={v => setEditForm({...editForm, email: v})}
+                  placeholder="Email"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="email-address"
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Ionicons name="call-outline" size={17} color={Colors.textMuted} style={styles.rowIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={editForm.phone}
+                  onChangeText={v => setEditForm({...editForm, phone: v})}
+                  placeholder="Phone"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <TouchableOpacity 
+                style={[styles.saveBtn, !hasChanges() && styles.saveBtnDisabled]} 
+                onPress={handleSaveClick}
+                disabled={!hasChanges()}
+              >
+                <Text style={[styles.saveBtnText, !hasChanges() && styles.saveBtnTextDisabled]}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <SettingsRow
+                icon="person-outline"
+                label="Name"
+                value={user.name}
+                showChevron={false}
+              />
+              <View style={styles.divider} />
+              <SettingsRow
+                icon="mail-outline"
+                label="Email"
+                value={user.email}
+                showChevron={false}
+              />
+              <View style={styles.divider} />
+              <SettingsRow
+                icon="call-outline"
+                label="Phone"
+                value={user.phone}
+                showChevron={false}
+              />
+            </>
+          )}
+          {!isEditing && (
+            <>
+              <View style={styles.divider} />
+              <SettingsRow
+                icon="lock-closed-outline"
+                label="Change password"
+                onPress={() => {}}
+              />
+            </>
+          )}
         </SectionGroup>
 
         {/* ── App Preferences ── */}
         <SectionGroup title="App Preferences">
-          <SettingsRow
+          <ToggleRow
             icon="contrast-outline"
-            label="Theme"
-            value="Dark"
-            onPress={() => {}}
+            label="Dark Theme"
+            value={true}
+            onToggle={handleThemeToggle}
           />
-          <GroupDivider />
+          <View style={styles.divider} />
           <ToggleRow
             icon="notifications-outline"
             label="Notifications"
@@ -160,22 +308,65 @@ const SettingsScreen = ({ navigation }) => {
             label="Clear chat history"
             onPress={() => {}}
           />
-          <GroupDivider />
+          <View style={styles.divider} />
+          <SettingsRow
+            icon="close-circle-outline"
+            label="Clear app memory"
+            onPress={() => {}}
+          />
+          <View style={styles.divider} />
           <SettingsRow
             icon="download-outline"
             label="Export notes"
             onPress={() => {}}
           />
+          <View style={styles.divider} />
+          <SettingsRow
+            icon="refresh-outline"
+            label="Reset onboarding preferences"
+            onPress={() => navigation.navigate('OnboardingScreen')}
+          />
         </SectionGroup>
 
         {/* ── Logout ── */}
-        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.7} onPress={() => navigation.replace('AuthChoiceScreen')}>
           <Ionicons name="log-out-outline" size={18} color={Colors.coral} />
           <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Password Confirmation Modal */}
+      <Modal
+        visible={showPasswordModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Changes</Text>
+            <Text style={styles.modalSubtitle}>Enter password to confirm</Text>
+            <TextInput
+              style={styles.modalInput}
+              secureTextEntry
+              placeholder="Password"
+              placeholderTextColor={Colors.textMuted}
+              value={passwordInput}
+              onChangeText={setPasswordInput}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowPasswordModal(false)}>
+                <Text style={styles.modalBtnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnConfirm} onPress={handleConfirmSave}>
+                <Text style={styles.modalBtnConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -201,10 +392,10 @@ const styles = StyleSheet.create({
     width: 28,
   },
   headerTitle: {
-    color: Colors.textPrimary,
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.2,
+    color: Colors.textPrimary,
   },
 
   scroll: {
@@ -219,20 +410,30 @@ const styles = StyleSheet.create({
   group: {
     marginBottom: 24,
   },
+  groupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   groupTitle: {
-    color: Colors.textMuted,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 8,
-    marginLeft: 4,
+    color: Colors.textPrimary,
+  },
+  groupAction: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.yellow,
   },
   groupCard: {
     backgroundColor: Colors.surface,
+    borderColor: Colors.border,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
     overflow: 'hidden',
   },
   divider: {
@@ -259,8 +460,8 @@ const styles = StyleSheet.create({
     width: 18,
   },
   rowLabel: {
-    color: Colors.textPrimary,
     fontSize: 14,
+    color: Colors.textPrimary,
   },
   rowRight: {
     flexDirection: 'row',
@@ -268,8 +469,43 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rowValue: {
-    color: Colors.textMuted,
     fontSize: 13,
+    color: Colors.textPrimary,
+  },
+
+  // Edit form
+  editForm: {
+    padding: 16,
+    gap: 12,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    color: Colors.textPrimary,
+  },
+  saveBtn: {
+    backgroundColor: Colors.yellow,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  saveBtnDisabled: {
+    backgroundColor: Colors.surfaceHigh,
+  },
+  saveBtnText: {
+    color: '#000',
+    fontWeight: '600',
+  },
+  saveBtnTextDisabled: {
+    color: Colors.textSecondary,
   },
 
   // Learning style picker
@@ -319,12 +555,72 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 15,
     borderWidth: 1,
-    borderColor: Colors.coral + '30',
+    borderColor: Colors.coralDim,
     marginBottom: 8,
   },
   logoutText: {
     color: Colors.coral,
     fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 14,
+    padding: 20,
+    borderWidth: 1,
+    backgroundColor: Colors.surface,
+    borderColor: Colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: Colors.textPrimary,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+    color: Colors.textPrimary,
+    borderColor: Colors.border,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalBtnCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  modalBtnCancelText: {
+    color: Colors.textMuted,
+    fontWeight: '600',
+  },
+  modalBtnConfirm: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.yellow,
+    borderRadius: 8,
+  },
+  modalBtnConfirmText: {
+    color: '#000',
     fontWeight: '600',
   },
 });

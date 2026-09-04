@@ -1,38 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import SplashScreen from './src/screens/SplashScreen';
+import AuthChoiceScreen from './src/screens/AuthChoiceScreen';
+import SignInScreen from './src/screens/SignInScreen';
+import SignUpScreen from './src/screens/SignUpScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
 import Colors from './src/theme/colors';
 
-// App flow: Splash → Onboarding → Main app
-// In a real app this state would be persisted with AsyncStorage
-// Phases: 'splash' | 'onboarding' | 'app'
+const Stack = createNativeStackNavigator();
 
 export default function App() {
-  const [phase, setPhase] = useState('splash');
-
-  if (phase === 'splash') {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="light" backgroundColor={Colors.bg} />
-        <SplashScreen onDone={() => setPhase('onboarding')} />
-      </SafeAreaProvider>
-    );
-  }
-
-  if (phase === 'onboarding') {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="light" backgroundColor={Colors.bg} />
-        <OnboardingScreen onDone={() => setPhase('app')} />
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <SafeAreaProvider>
       <StatusBar style="light" backgroundColor={Colors.bg} />
@@ -49,7 +31,14 @@ export default function App() {
           },
         }}
       >
-        <BottomTabNavigator />
+        <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="SplashScreen">
+          <Stack.Screen name="SplashScreen" component={SplashScreen} />
+          <Stack.Screen name="AuthChoiceScreen" component={AuthChoiceScreen} />
+          <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
+          <Stack.Screen name="SignInScreen" component={SignInScreen} />
+          <Stack.Screen name="OnboardingScreen" component={OnboardingScreen} />
+          <Stack.Screen name="App" component={BottomTabNavigator} />
+        </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
   );

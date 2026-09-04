@@ -2,28 +2,30 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../theme/colors';
 
-import HomeScreen    from '../screens/HomeScreen';
-import ChatsStack    from './ChatsStack';
+import HomeStack     from './HomeStack';
+import ChatStack     from './ChatStack';
 import NotesStack    from './NotesStack';
 import ProfileStack  from './ProfileStack';
+import Colors from '../theme/colors';
 
 
 const Tab = createBottomTabNavigator();
 
-const TabIcon = ({ name, label, focused }) => (
-  <View style={styles.iconWrapper}>
-    <Ionicons
-      name={focused ? name.replace('-outline', '') : name}
-      size={22}
-      color={focused ? Colors.yellow : Colors.textMuted}
-    />
-    <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
-      {label}
-    </Text>
-  </View>
-);
+const TabIcon = ({ name, label, focused }) => {
+  return (
+    <View style={styles.iconWrapper}>
+      <Ionicons
+        name={focused ? name.replace('-outline', '') : name}
+        size={22}
+        color={focused ? Colors.yellow : Colors.textMuted}
+      />
+      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
+        {label}
+      </Text>
+    </View>
+  );
+};
 
 const BottomTabNavigator = () => {
   return (
@@ -36,8 +38,8 @@ const BottomTabNavigator = () => {
       }}
     >
       <Tab.Screen
-        name="Home"
-        component={HomeScreen}
+        name="HomeStack"
+        component={HomeStack}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon name="home-outline" label="home" focused={focused} />
@@ -45,16 +47,17 @@ const BottomTabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Chat"
-        component={ChatsStack}
+        name="ChatStack"
+        component={ChatStack}
         options={{
+          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="chatbubble-outline" label="chats" focused={focused} />
           ),
         }}
       />
       <Tab.Screen
-        name="Notes"
+        name="NotesStack"
         component={NotesStack}
 
         options={{
@@ -64,7 +67,7 @@ const BottomTabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Profile"
+        name="ProfileStack"
         component={ProfileStack}
         options={{
           tabBarIcon: ({ focused }) => (
