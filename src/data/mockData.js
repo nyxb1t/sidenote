@@ -713,6 +713,7 @@ export const NOTEBOOK_CONTENT = [
 export const CHAT_MESSAGES = [];
 
 export const QUICK_ACTIONS = [
+  { id: 'lesson', label: 'Lesson', icon: 'bulb-outline' },
   { id: 'syllabus', label: 'Syllabus', icon: 'book-outline' },
   { id: 'notes', label: 'Notes', icon: 'document-text-outline' },
   { id: 'assignment', label: 'Assignment', icon: 'clipboard-outline' },

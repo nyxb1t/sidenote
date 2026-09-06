@@ -14,7 +14,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 // Removed NOTEBOOK_CONTENT import
-import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote } from '../data/globalState';
+import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote, setChatSessionBookmarked } from '../data/globalState';
+import { generateNotes, generateRetryExplanation, trackLearnerEvent, updateLessonProgress } from '../services/aiService';
 import DraggableStickyNote from '../components/DraggableStickyNote';
 import Colors from '../theme/colors';
 
@@ -24,7 +25,7 @@ const PANEL_ACTIONS = [
   { id: 'examples', icon: 'book-outline',           label: 'More\nexamples'    },
   { id: 'practice', icon: 'barbell-outline',        label: 'Practice\nquestions' },
   { id: 'retry',    icon: 'refresh-outline',        label: 'Try\nagain'        },
-  { id: 'note',     icon: 'create-outline',         label: 'Sticky\nnote'      },
+  { id: 'notes',    icon: 'document-text-outline',  label: 'Generate\nNotes'   },
 ];
 
 // ─── Panel heights ─────────────────────────────────────────────────────────────
@@ -196,8 +197,22 @@ const ChatScreen = ({ navigation, route }) => {
   // ── Handle panel action — APPEND-ONLY to messages ────────────────────────
   const handlePanelAction = (id) => {
     collapsePanel();
-    if (id === 'note') {
-      setStickyNotes(prev => [...prev, { id: Date.now().toString(), text: '' }]);
+    if (id === 'notes') {
+      const fetchNotes = async () => {
+        try {
+          const result = await generateNotes(route.params.topicId);
+          const note = result.data || result;
+          note.updatedAt = new Date().toLocaleDateString();
+          note.title = note.topic || chatSession?.title || 'Notes';
+          navigation.navigate('NotesStack', {
+            screen: 'NoteDetailScreen',
+            params: { note: note, topic: { title: note.title } }
+          });
+        } catch (err) {
+          alert(err.message || 'Error generating notes');
+        }
+      };
+      fetchNotes();
     } else if (id === 'visual') {
       setMessages(prev => [
         ...prev,
@@ -205,20 +220,7 @@ const ChatScreen = ({ navigation, route }) => {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'practice') {
-      const q = PRACTICE_QUESTIONS[Math.floor(Math.random() * PRACTICE_QUESTIONS.length)];
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'practice-' + Date.now(),
-          type: 'practice',
-          timestamp: Date.now(),
-          question: q.question,
-          options: q.options,
-          correctKey: q.correctKey,
-          explanations: q.explanations,
-        },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      navigation.navigate('HomeStack', { screen: 'QuizScreen', params: { topic: chatSession?.title, lesson_id: route.params.topicId } });
     } else if (id === 'examples') {
       setMessages(prev => [
         ...prev,
@@ -237,20 +239,37 @@ const ChatScreen = ({ navigation, route }) => {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'retry') {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'b-re-' + Date.now(),
-          type: 'block',
-          timestamp: Date.now(),
-          block: {
-            id: 'b-re-' + Date.now(),
-            type: 'paragraph',
-            text: "Let me explain that differently: Memoisation is just caching. Imagine if you had to recalculate 12 × 12 every time someone asked you. Instead, you just memorize it. That's memoisation.",
-          },
-        },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      const fetchRetry = async () => {
+        try {
+          setMessages(prev => [...prev, { id: 'retry-loading', type: 'block', timestamp: Date.now(), block: { id: 'r-load', type: 'paragraph', text: 'Thinking of a different way to explain...' } }]);
+          
+          const previous_strategy = chatSession?.teachingStrategy || 'step-by-step';
+          const topicStr = chatSession?.title || 'this topic';
+          const result = await generateRetryExplanation(topicStr, previous_strategy);
+          const retryObj = result.data || result;
+          
+          await trackLearnerEvent({
+            type: 'retry_requested',
+            topic: topicStr,
+            strategyUsed: retryObj.strategy || previous_strategy
+          });
+          
+          setMessages(prev => {
+            const withoutLoading = prev.filter(m => m.id !== 'retry-loading');
+            if (retryObj.content && Array.isArray(retryObj.content)) {
+              return [...withoutLoading, ...retryObj.content];
+            } else if (retryObj.explanation) {
+              return [...withoutLoading, { id: 'retry-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'r-' + Date.now(), type: 'paragraph', text: retryObj.explanation } }];
+            }
+            return withoutLoading;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+        } catch (err) {
+          alert(err.message || 'Error fetching explanation');
+          setMessages(prev => prev.filter(m => m.id !== 'retry-loading'));
+        }
+      };
+      fetchRetry();
     }
   };
 
@@ -313,6 +332,28 @@ const ChatScreen = ({ navigation, route }) => {
   };
 
   const isThreadEmpty = messages.length === 0;
+
+  useEffect(() => {
+    if (route.params?.topicId) {
+      updateLessonProgress(route.params.topicId, { status: 'in_progress', progress: 0.5 }).catch(console.error);
+    }
+  }, [route.params?.topicId]);
+
+  const handleScroll = (event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const isBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+    if (isBottom && !scrollRef.current?.hasMarkedComplete) {
+      scrollRef.current.hasMarkedComplete = true;
+      if (route.params?.topicId) {
+        updateLessonProgress(route.params.topicId, { status: 'completed', progress: 1 }).catch(console.error);
+        trackLearnerEvent({ type: 'lesson_complete', topic: chatSession?.title }).catch(console.error);
+        
+        // update local state
+        if (chatSession) chatSession.progress = 1;
+      }
+    }
+  };
+
 
   // ── Opacity interpolation for labels (collapsed → expanded) ──────────────
   const labelOpacity = panelAnim.interpolate({
@@ -399,6 +440,7 @@ const ChatScreen = ({ navigation, route }) => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           onScrollBeginDrag={collapsePanel}
+            onScroll={handleScroll}
           scrollEventThrottle={16}
         >
           {/* ─── Empty state for new thread ─── */}

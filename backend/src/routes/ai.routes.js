@@ -1,4 +1,4 @@
-﻿/**
+/**
  * backend/src/routes/ai.routes.js
  *
  * AI generation endpoints. All routes require authentication via the
@@ -313,6 +313,7 @@ function buildLearnerContext(plan, learnerModel) {
 const lessonRequestSchema = z.object({
   topic:   z.string().min(1).max(500),
   subject: z.string().min(1).max(200).nullable().optional(),
+  difficulty: z.string().optional(),
 }).strict();
 
 const quizRequestSchema = z.object({
