@@ -2,10 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { globalState } from '../data/globalState';
 import Colors from '../theme/colors';
 
 export default function TopicSelectionScreen({ navigation }) {
-  const topics = ['Dynamic Programming', 'Process Scheduling', 'Sorting Algorithms', 'Graphs'];
+  // Use actual generated lessons from global state
+  const sessions = globalState.chatSessions || [];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -13,21 +15,24 @@ export default function TopicSelectionScreen({ navigation }) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Select Topic to Test</Text>
+        <Text style={styles.headerTitle}>Select Lesson to Test</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.listContainer}>
-        {topics.map((topic, i) => (
+        {sessions.map((session, i) => (
           <TouchableOpacity
             key={i}
             style={styles.topicCard}
-            onPress={() => navigation.navigate('QuizScreen', { topic })}
+            onPress={() => navigation.navigate('QuizScreen', { topic: session.title, lesson_id: session.topicId })}
           >
-            <Text style={styles.topicText}>{topic}</Text>
+            <Text style={styles.topicText}>{session.title}</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
         ))}
+        {sessions.length === 0 && (
+          <Text style={{color: Colors.textMuted, textAlign: 'center', marginTop: 20}}>No lessons found. Generate a lesson first!</Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

@@ -1,30 +1,127 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { addTestResult } from '../data/globalState';
+import { globalState, addTestResult } from '../data/globalState';
+import { generateQuiz, submitQuizAttempt, trackLearnerEvent } from '../services/aiService';
 import Colors from '../theme/colors';
 
 export default function QuizScreen({ navigation, route }) {
-  const { topic } = route.params || { topic: 'General' };
-  const [selectedOpt, setSelectedOpt] = useState(null);
+  const { topic, lesson_id } = route.params || { topic: 'General', lesson_id: null };
+  const [questions, setQuestions] = useState([]);
+  const [quizId, setQuizId] = useState(null);
+  
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [answers, setAnswers] = useState({}); // key: question index, value: selected option index
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [quizScore, setQuizScore] = useState(0);
 
-  const handleSubmit = () => {
-    setFinished(true);
-    addTestResult({
-      id: Date.now().toString(),
-      topic,
-      score: selectedOpt === 0 ? '100%' : '0%',
-      date: new Date().toLocaleDateString(),
-      questions: [{
-        q: 'What is the primary advantage of this concept?',
-        options: ['Better time complexity', 'Less space complexity', 'Easier to code', 'None of the above'],
-        userAnswer: selectedOpt,
-        correctAnswer: 0
-      }]
-    });
+  useEffect(() => {
+    if (!lesson_id) {
+      alert('No lesson ID provided');
+      navigation.goBack();
+      return;
+    }
+    const fetchQuiz = async () => {
+      try {
+        const result = await generateQuiz(lesson_id);
+        const quizRow = result.data || result;
+        setQuizId(quizRow.id);
+        if (quizRow.content && quizRow.content.questions) {
+          setQuestions(quizRow.content.questions);
+        } else {
+          setQuestions([]);
+        }
+      } catch (err) {
+        alert(err.message || 'Error generating quiz');
+        navigation.goBack();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchQuiz();
+  }, [lesson_id]);
+
+  const handleSelect = (idx) => {
+    setAnswers(prev => ({ ...prev, [currentIdx]: idx }));
   };
+
+  const handleNext = () => {
+    if (currentIdx < questions.length - 1) {
+      setCurrentIdx(currentIdx + 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      let correctCount = 0;
+      const formattedAnswers = {};
+      const mistakeTopics = [];
+      
+      questions.forEach((q, i) => {
+        const selected = answers[i];
+        formattedAnswers[q.id || i] = selected;
+        if (q.type === 'mcq' && selected === q.correctIndex) {
+          correctCount++;
+        } else if (q.type === 'true_false' && (selected === 0) === q.correctAnswer) {
+          correctCount++;
+        } else {
+          mistakeTopics.push(topic);
+        }
+      });
+      
+      const score = questions.length > 0 ? (correctCount / questions.length) : 0;
+      setQuizScore(score);
+      
+      if (quizId) {
+        await submitQuizAttempt(quizId, {
+          answers: formattedAnswers,
+          score: score,
+          mistake_topics: mistakeTopics
+        });
+      }
+
+      await trackLearnerEvent({
+        type: 'quiz_result',
+        topic: topic,
+        score: score,
+        mistakeTopics: mistakeTopics
+      });
+      
+      setFinished(true);
+      
+      addTestResult({
+        id: Date.now().toString(),
+        topic,
+        score: `${Math.round(score * 100)}%`,
+        date: new Date().toLocaleDateString(),
+        questions: []
+      });
+      
+    } catch (err) {
+      alert(err.message || 'Error submitting quiz');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {justifyContent: 'center', alignItems: 'center'}]} edges={['top']}>
+        <ActivityIndicator size="large" color={Colors.yellow} />
+        <Text style={{color: Colors.textSecondary, marginTop: 16}}>Generating personalised quiz...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const currentQ = questions[currentIdx];
+  const isLastQ = currentIdx === questions.length - 1;
+  const currentSelected = answers[currentIdx];
+  const hasSelected = currentSelected !== undefined;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -38,28 +135,59 @@ export default function QuizScreen({ navigation, route }) {
 
       <ScrollView contentContainerStyle={styles.container}>
         {!finished ? (
-          <>
-            <Text style={styles.questionText}>What is the primary advantage of this concept?</Text>
-            
-            {['Better time complexity', 'Less space complexity', 'Easier to code', 'None of the above'].map((opt, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.optionCard, selectedOpt === i && styles.optionSelected]}
-                onPress={() => setSelectedOpt(i)}
-              >
-                <Text style={[styles.optionText, selectedOpt === i && styles.optionTextSelected]}>{opt}</Text>
-              </TouchableOpacity>
-            ))}
+          currentQ ? (
+            <>
+              <Text style={styles.progressText}>Question {currentIdx + 1} of {questions.length}</Text>
+              <Text style={styles.questionText}>{currentQ.question}</Text>
+              
+              {currentQ.type === 'true_false' ? (
+                ['True', 'False'].map((opt, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.optionCard, currentSelected === i && styles.optionSelected]}
+                    onPress={() => handleSelect(i)}
+                  >
+                    <Text style={[styles.optionText, currentSelected === i && styles.optionTextSelected]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                (currentQ.options || []).map((opt, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.optionCard, currentSelected === i && styles.optionSelected]}
+                    onPress={() => handleSelect(i)}
+                  >
+                    <Text style={[styles.optionText, currentSelected === i && styles.optionTextSelected]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
 
-            <TouchableOpacity style={[styles.submitBtn, selectedOpt === null && styles.submitBtnDisabled]} onPress={handleSubmit} disabled={selectedOpt === null}>
-              <Text style={styles.submitBtnText}>Submit Answer</Text>
-            </TouchableOpacity>
-          </>
+              {isLastQ ? (
+                <TouchableOpacity 
+                  style={[styles.submitBtn, (!hasSelected || isSubmitting) && styles.submitBtnDisabled]} 
+                  onPress={handleSubmit} 
+                  disabled={!hasSelected || isSubmitting}
+                >
+                  <Text style={styles.submitBtnText}>{isSubmitting ? 'Submitting...' : 'Submit Answers'}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity 
+                  style={[styles.submitBtn, !hasSelected && styles.submitBtnDisabled]} 
+                  onPress={handleNext} 
+                  disabled={!hasSelected}
+                >
+                  <Text style={styles.submitBtnText}>Next Question</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <Text style={{color: Colors.textSecondary, textAlign: 'center'}}>No questions available.</Text>
+          )
         ) : (
           <View style={styles.resultBox}>
             <Ionicons name="checkmark-circle" size={48} color={Colors.yellow} />
             <Text style={styles.resultTitle}>Test Completed!</Text>
-            <Text style={styles.resultText}>Your answers have been evaluated and saved to your Test History.</Text>
+            <Text style={styles.resultText}>You scored {Math.round(quizScore * 100)}%.</Text>
             <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.navigate('HomeStack')}>
               <Text style={styles.doneBtnText}>Back to Home</Text>
             </TouchableOpacity>
@@ -79,6 +207,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4, marginLeft: -4 },
   headerTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '600' },
   container: { padding: 20, gap: 16 },
+  progressText: { color: Colors.textMuted, fontSize: 14, fontWeight: '600', marginBottom: 4 },
   questionText: { color: Colors.textPrimary, fontSize: 20, fontWeight: '600', marginBottom: 12 },
   optionCard: { padding: 16, backgroundColor: Colors.surface, borderRadius: 12, borderWidth: 1, borderColor: Colors.border },
   optionSelected: { borderColor: Colors.yellow, backgroundColor: Colors.yellowDim },

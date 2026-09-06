@@ -15,7 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ProgressBar from '../components/ProgressBar';
 import QuickActionButton from '../components/QuickActionButton';
 import { QUICK_ACTIONS } from '../data/mockData';
-import { globalState, addSyllabus, addNotes, addAssignment } from '../data/globalState';
+import { globalState, addSyllabus, addNotes, addAssignment, createChatForTopic } from '../data/globalState';
+import { generateLesson, uploadFile, trackLearnerEvent } from '../services/aiService';
 import Colors from '../theme/colors';
 
 const { height } = Dimensions.get('window');
@@ -32,6 +33,10 @@ const HomeScreen = ({ navigation }) => {
   const [syllabusModal, setSyllabusModal] = useState(false);
   const [notesModal, setNotesModal] = useState(false);
   const [assignmentModal, setAssignmentModal] = useState(false);
+  const [lessonModal, setLessonModal] = useState(false);
+  const [lessonTopic, setLessonTopic] = useState('');
+  const [lessonDifficulty, setLessonDifficulty] = useState('beginner');
+  const [isGenerating, setIsGenerating] = useState(false);
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   
@@ -43,7 +48,8 @@ const HomeScreen = ({ navigation }) => {
     // Simulate instant upload feeling
     const mockFile = {
       name: type === 'PDF' ? 'document_v2.pdf' : 'photo_upload.jpg',
-      type: type,
+      type: type === 'PDF' ? 'application/pdf' : 'image/jpeg',
+      uri: 'file:///dummy/path/to/' + (type === 'PDF' ? 'document_v2.pdf' : 'photo_upload.jpg')
     };
     setSelectedFile(mockFile);
   };
@@ -74,6 +80,47 @@ const HomeScreen = ({ navigation }) => {
       setInputText('');
       setSelectedFile(null);
       setNotesModal(true);
+    }
+  };
+
+  const handleLessonAction = () => {
+    setLessonTopic('');
+    setLessonDifficulty('beginner');
+    setLessonModal(true);
+  };
+
+  const handleGenerateLesson = async () => {
+    if (!lessonTopic.trim()) return;
+    setIsGenerating(true);
+    try {
+      const result = await generateLesson(lessonTopic.trim(), lessonDifficulty);
+      const lesson = result.data || result; // Fallback if wrapper is missing
+      const session = createChatForTopic({ 
+        topicId: lesson.id || Date.now().toString(), 
+        topicTitle: lessonTopic, 
+        subject: lesson.subject || 'Lesson', 
+        subtitle: lesson.title || 'Generated Lesson' 
+      });
+      if (lesson.content && Array.isArray(lesson.content)) {
+         session.blocks = lesson.content;
+      }
+      
+      // Track session_start event
+      trackLearnerEvent({ type: 'session_start', topic: lessonTopic }).catch(e => console.warn('Learner event failed:', e));
+      
+      setLessonModal(false);
+      navigation.navigate('ChatStack', {
+        screen: 'Chat',
+        params: {
+          topicId: session.id,
+          topicTitle: session.title,
+          isNewChat: false,
+        }
+      });
+    } catch (err) {
+      alert(err.message || 'Error generating lesson');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -184,6 +231,7 @@ const HomeScreen = ({ navigation }) => {
                   if (action.id === 'syllabus') handleSyllabusAction();
                   else if (action.id === 'notes') handleNotesAction();
                   else if (action.id === 'assignment') handleAssignmentAction();
+                  else if (action.id === 'lesson') handleLessonAction();
                   else handleTestMeAction();
                 }}
               />
@@ -268,6 +316,63 @@ const HomeScreen = ({ navigation }) => {
             </View>
           </Modal>
         ))}
+
+        {/* GENERATE LESSON MODAL */}
+        <Modal visible={lessonModal} transparent animationType="slide">
+          <View style={styles.modalBg}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Generate Lesson</Text>
+              <Text style={styles.modalSub}>Enter topic and select difficulty</Text>
+
+              <TextInput 
+                style={[styles.modalInput, { minHeight: 60, marginBottom: 12 }]} 
+                placeholder="E.g. Photosynthesis" 
+                placeholderTextColor={Colors.textMuted}
+                value={lessonTopic}
+                onChangeText={setLessonTopic}
+              />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24, gap: 8 }}>
+                {['beginner', 'intermediate', 'advanced'].map(d => (
+                  <TouchableOpacity 
+                    key={d} 
+                    onPress={() => setLessonDifficulty(d)}
+                    style={{ 
+                      flex: 1, 
+                      alignItems: 'center',
+                      paddingVertical: 10, 
+                      borderRadius: 8, 
+                      backgroundColor: lessonDifficulty === d ? Colors.yellow : Colors.surface,
+                      borderWidth: 1,
+                      borderColor: lessonDifficulty === d ? Colors.yellow : Colors.border
+                    }}
+                  >
+                    <Text style={{ 
+                      color: lessonDifficulty === d ? '#000' : Colors.textPrimary,
+                      fontWeight: lessonDifficulty === d ? '700' : '500',
+                      textTransform: 'capitalize'
+                    }}>{d}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setLessonModal(false)} disabled={isGenerating}>
+                  <Text style={styles.modalBtnTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.modalBtnSubmit, (!lessonTopic.trim() || isGenerating) && styles.submitDisabled]} 
+                  disabled={!lessonTopic.trim() || isGenerating}
+                  onPress={handleGenerateLesson}
+                >
+                  <Text style={[styles.modalBtnTextSubmit, (!lessonTopic.trim() || isGenerating) && styles.submitTextDisabled]}>
+                    {isGenerating ? 'Generating...' : 'Generate'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
       </View>
     </SafeAreaView>
