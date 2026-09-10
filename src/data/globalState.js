@@ -34,6 +34,7 @@ const initialSessions = THREADS.map((t, index) => ({
   userNotes: [],
   blocks: getInitialBlocksForThread(t),
   bookmarked: t.pinned || false,
+  stickyNotes: [],
 }));
 
 export const globalState = {
@@ -143,6 +144,7 @@ export const createChatForTopic = ({ topicId, topicTitle, subject, subtitle }) =
     blocks: [],
     isNew: true,
     bookmarked: false,
+    stickyNotes: [],
   };
 
   globalState.chatSessions.unshift(newChat);
@@ -162,3 +164,20 @@ export const saveChatNote = (chatId, note) => {
   }
 };
 
+/**
+ * Overwrites the sticky notes array for a chat session.
+ */
+export const saveStickyNotes = (chatId, notes) => {
+  const chat = globalState.chatSessions.find(c => c.id === chatId);
+  if (chat) {
+    chat.stickyNotes = notes;
+  }
+};
+
+/**
+ * Returns the sticky notes array for a chat session.
+ */
+export const getStickyNotes = (chatId) => {
+  const chat = globalState.chatSessions.find(c => c.id === chatId);
+  return chat?.stickyNotes || [];
+};

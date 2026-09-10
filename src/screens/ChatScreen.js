@@ -14,9 +14,11 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 // Removed NOTEBOOK_CONTENT import
-import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote } from '../data/globalState';
+import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote, saveStickyNotes, getStickyNotes } from '../data/globalState';
 import DraggableStickyNote from '../components/DraggableStickyNote';
+import StickyNoteToolbar from '../components/StickyNoteToolbar';
 import Colors from '../theme/colors';
+
 
 // ─── Action panel items ────────────────────────────────────────────────────────
 const PANEL_ACTIONS = [
@@ -102,7 +104,16 @@ const ChatScreen = ({ navigation, route }) => {
   const [inputText, setInputText] = useState('');
   const [bookmarked, setBookmarked] = useState(chatSession?.bookmarked || false);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [stickyNotes, setStickyNotes] = useState([]);
+
+  // ── Sticky notes state ───────────────────────────────────────────────────
+  const [stickyNotes, setStickyNotes] = useState(() =>
+    getStickyNotes(chatSession?.id)
+  );
+  // Which note is currently selected (shows toolbar, auto-focuses TextInput)
+  const [activeNoteId, setActiveNoteId] = useState(null);
+  // True while dragging OR resizing a note → disables ScrollView scroll
+  const [isDraggingNote, setIsDraggingNote] = useState(false);
+
 
   // ── Unified message list — single source of truth for all chat content ───
   // Every message has: { id, type, timestamp, ...typeSpecificFields }
@@ -167,8 +178,73 @@ const ChatScreen = ({ navigation, route }) => {
     }
   }, [chatId, topicId, topicTitle, isNewChat, routeIsNew]);
 
+  // ── Reload sticky notes when session changes (e.g. navigating to new chat)
+  useEffect(() => {
+    if (chatSession?.id) {
+      setStickyNotes(getStickyNotes(chatSession.id));
+      setActiveNoteId(null);
+    }
+  }, [chatSession?.id]);
+
+  // ── Sticky note CRUD helpers ──────────────────────────────────────────────
+
+  /**
+   * Creates a new note positioned near the top of the note layer,
+   * staggered so multiple notes don't perfectly overlap.
+   */
+  const addStickyNote = useCallback(() => {
+    const stagger = (stickyNotes.length % 4) * 18;
+    const newNote = {
+      id: `note_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      offsetX: 20 + stagger,
+      offsetY: 20 + stagger,
+      width: 165,
+      height: 165,
+      text: '',
+      color: '#FDEE87',
+      strokes: [],
+      mode: 'text',
+      penColor: '#1a1a1a',
+      penThickness: 2,
+    };
+    setStickyNotes((prev) => {
+      const next = [...prev, newNote];
+      if (chatSession?.id) saveStickyNotes(chatSession.id, next);
+      return next;
+    });
+    // Auto-activate new note so TextInput gets focus immediately
+    setActiveNoteId(newNote.id);
+  }, [stickyNotes.length, chatSession?.id]);
+
+  /**
+   * Merges a partial patch into the note with the given id,
+   * then persists the entire updated array.
+   */
+  const updateStickyNote = useCallback((noteId, patch) => {
+    setStickyNotes((prev) => {
+      const next = prev.map((n) =>
+        n.id === noteId ? { ...n, ...patch } : n
+      );
+      if (chatSession?.id) saveStickyNotes(chatSession.id, next);
+      return next;
+    });
+  }, [chatSession?.id]);
+
+  /**
+   * Removes a note by id, deactivates toolbar if it was active.
+   */
+  const removeStickyNote = useCallback((noteId) => {
+    setStickyNotes((prev) => {
+      const next = prev.filter((n) => n.id !== noteId);
+      if (chatSession?.id) saveStickyNotes(chatSession.id, next);
+      return next;
+    });
+    setActiveNoteId((prev) => (prev === noteId ? null : prev));
+  }, [chatSession?.id]);
+
   // Animated value for panel height
   const panelAnim = useRef(new Animated.Value(PANEL_COLLAPSED_H)).current;
+
 
   // ── Toggle panel ──────────────────────────────────────────────────────────
   const togglePanel = useCallback(() => {
@@ -197,7 +273,7 @@ const ChatScreen = ({ navigation, route }) => {
   const handlePanelAction = (id) => {
     collapsePanel();
     if (id === 'note') {
-      setStickyNotes(prev => [...prev, { id: Date.now().toString(), text: '' }]);
+      addStickyNote();
     } else if (id === 'visual') {
       setMessages(prev => [
         ...prev,
@@ -252,10 +328,6 @@ const ChatScreen = ({ navigation, route }) => {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     }
-  };
-
-  const removeStickyNote = (id) => {
-    setStickyNotes(prev => prev.filter(note => note.id !== id));
   };
 
   // ── Inline content actions ────────────────────────────────────────────────
@@ -371,16 +443,6 @@ const ChatScreen = ({ navigation, route }) => {
       {/* Subtle divider */}
       <View style={styles.dividerTop} />
 
-      {/* ── STICKY NOTES OVERLAY ── */}
-      {stickyNotes.map(note => (
-        <DraggableStickyNote 
-          key={note.id} 
-          id={note.id} 
-          initialText={note.text} 
-          onClose={removeStickyNote} 
-        />
-      ))}
-
       {/* ── KEYBOARD AVOIDING WRAPPER ── */}
       <KeyboardAvoidingView
         style={styles.flex}
@@ -398,8 +460,14 @@ const ChatScreen = ({ navigation, route }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          onScrollBeginDrag={collapsePanel}
+          onScrollBeginDrag={() => {
+            collapsePanel();
+            // Tapping outside a note deactivates it
+            if (activeNoteId) setActiveNoteId(null);
+          }}
           scrollEventThrottle={16}
+          // ↓ Disable scroll while user is dragging or resizing a note
+          scrollEnabled={!isDraggingNote}
         >
           {/* ─── Empty state for new thread ─── */}
           {isThreadEmpty ? (
@@ -473,7 +541,42 @@ const ChatScreen = ({ navigation, route }) => {
               return null;
             })
           )}
+
+          {/*
+            ── STICKY NOTE LAYER ────────────────────────────────────────────────
+            Anchored INSIDE ScrollView content so notes scroll with chat.
+            Position absolute within this container — notes are independently
+            placed via offsetX/offsetY relative to this layer.
+            Height is large enough to contain all note positions.
+          */}
+          {stickyNotes.length > 0 && (
+            <View
+              style={styles.noteLayer}
+              // Tap on the empty area of the note layer (not on a note) → deactivate
+              onStartShouldSetResponder={() => {
+                if (activeNoteId) {
+                  setActiveNoteId(null);
+                  return true;
+                }
+                return false;
+              }}
+            >
+              {stickyNotes.map((note) => (
+                <DraggableStickyNote
+                  key={note.id}
+                  note={note}
+                  isActive={activeNoteId === note.id}
+                  onActivate={setActiveNoteId}
+                  onUpdate={updateStickyNote}
+                  onRemove={removeStickyNote}
+                  onDragStart={() => setIsDraggingNote(true)}
+                  onDragEnd={() => setIsDraggingNote(false)}
+                />
+              ))}
+            </View>
+          )}
         </ScrollView>
+
 
         {/* ── FIXED BOTTOM ── */}
         <View
@@ -482,6 +585,13 @@ const ChatScreen = ({ navigation, route }) => {
             { paddingBottom: insets.bottom },
           ]}
         >
+          {/* ── STICKY NOTE TOOLBAR (shown only when a note is active) ── */}
+          <StickyNoteToolbar
+            activeNote={stickyNotes.find((n) => n.id === activeNoteId) || null}
+            onUpdate={updateStickyNote}
+            onDeactivate={() => setActiveNoteId(null)}
+          />
+
           {/* ── ACTION PANEL ── */}
           <Animated.View style={[styles.actionPanel, { height: panelAnim }]}>
             {/* Collapsed strip — always tappable */}
