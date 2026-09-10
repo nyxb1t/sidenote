@@ -161,7 +161,34 @@ const NoteDetailScreen = ({ route, navigation }) => {
 
         {/* Body */}
         <View style={styles.body}>
-          <BodyRenderer body={note.body} />
+          {note.content ? (
+            <>
+              {note.content.summary && <Text style={[styles.bodyText, {marginBottom: 16}]}>{note.content.summary}</Text>}
+              
+              {note.content.bulletPoints && note.content.bulletPoints.map((bp, i) => (
+                <View key={'bp'+i} style={styles.listRow}>
+                  <Text style={styles.bullet}>•</Text>
+                  <Text style={[styles.bodyText, styles.listText]}>{bp}</Text>
+                </View>
+              ))}
+              
+              {note.content.keyTerms && note.content.keyTerms.length > 0 && (
+                <>
+                  <Text style={[styles.heading, {marginTop: 24, marginBottom: 12}]}>Key Terms</Text>
+                  {note.content.keyTerms.map((term, i) => (
+                    <View key={'kt'+i} style={styles.listRow}>
+                      <Text style={styles.bullet}>•</Text>
+                      <Text style={[styles.bodyText, styles.listText]}>
+                        <Text style={styles.bold}>{term.term}: </Text>{term.definition}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </>
+          ) : (
+            <BodyRenderer body={note.body} />
+          )}
         </View>
 
         <View style={{ height: 40 }} />
