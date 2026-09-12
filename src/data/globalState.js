@@ -181,3 +181,13 @@ export const getStickyNotes = (chatId) => {
   const chat = globalState.chatSessions.find(c => c.id === chatId);
   return chat?.stickyNotes || [];
 };
+
+/**
+ * Sets the bookmarked flag for a chat session by id.
+ */
+export const setChatSessionBookmarked = (chatId, bookmarked) => {
+  const chat = globalState.chatSessions.find(c => c.id === chatId);
+  if (chat) {
+    chat.bookmarked = bookmarked;
+  }
+};

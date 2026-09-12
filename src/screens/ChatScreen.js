@@ -295,7 +295,12 @@ if (id === 'note') {
 
   const fetchNotes = async () => {
     try {
-      const result = await generateNotes(route.params.topicId);
+      const lessonId = chatSession?.topicId || route.params?.topicId;
+      if (!lessonId) {
+        alert('No lesson ID available. Please generate a lesson first.');
+        return;
+      }
+      const result = await generateNotes(lessonId);
       const note = result.data || result;
 
       note.updatedAt = new Date().toLocaleDateString();

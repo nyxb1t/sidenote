@@ -11,7 +11,9 @@ import {
   Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../theme/colors';
+import { supabase } from '../lib/supabaseClient';
 
 let GoogleSignin;
 let statusCodes = {};
@@ -35,14 +37,16 @@ const SignUpScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSignUp = () => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSignUp = async () => {
     setError('');
-    
+
     if (!email || !password || !confirmPassword) {
       setError('All fields are required.');
       return;
     }
-    
+
     // Basic email format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -60,8 +64,26 @@ const SignUpScreen = ({ navigation }) => {
       return;
     }
 
-    // Success logic
-    navigation.replace('OnboardingScreen');
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({ email, password });
+      if (authError) {
+        setError(authError.message || 'Sign up failed. Please try again.');
+        return;
+      }
+      // If email confirmation is required, session may be null
+      if (data?.session?.access_token) {
+        await AsyncStorage.setItem('supabase_token', data.session.access_token);
+        navigation.replace('OnboardingScreen');
+      } else {
+        // Email confirmation pending — inform user and let them sign in after confirming
+        setError('Account created! Please check your email to confirm, then sign in.');
+      }
+    } catch (e) {
+      setError(e.message || 'Sign up failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignUp = async () => {
@@ -152,8 +174,8 @@ const SignUpScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp} activeOpacity={0.8}>
-              <Text style={styles.primaryButtonText}>Create Account</Text>
+            <TouchableOpacity style={[styles.primaryButton, loading && { opacity: 0.7 }]} onPress={handleSignUp} activeOpacity={0.8} disabled={loading}>
+              <Text style={styles.primaryButtonText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignUp} activeOpacity={0.8}>

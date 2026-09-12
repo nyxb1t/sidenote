@@ -1,18 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+// Prefer EXPO_PUBLIC_API_URL env var; fall back to platform-specific localhost for dev
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000');
 
 const getAuthToken = async () => {
   try {
-    let token = await AsyncStorage.getItem('supabase_token');
+    const token = await AsyncStorage.getItem('supabase_token');
     if (!token) {
-      console.warn('No Supabase token found in AsyncStorage. Using mock token for now.');
-      token = 'mock_token';
+      throw new Error('Not authenticated. Please sign in.');
     }
     return token;
   } catch (e) {
-    return 'mock_token';
+    throw e instanceof Error ? e : new Error('Not authenticated. Please sign in.');
   }
 };
 
@@ -22,20 +24,20 @@ const _fetch = async (endpoint, method = 'POST', bodyData = null) => {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Authorization': `Bearer ${token}`,
     },
   };
-  if (bodyData) {
+  if (bodyData && method !== 'GET') {
     options.body = JSON.stringify(bodyData);
   }
 
   const res = await fetch(`${API_URL}${endpoint}`, options);
-  
+
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error?.message || errorData.message || `Request failed with status ${res.status}`);
   }
-  
+
   return await res.json();
 };
 
@@ -49,26 +51,30 @@ export const getLessonProgress = (lesson_id) => _fetch(`/v1/lessons/${lesson_id}
 export const updateLessonProgress = (lesson_id, progress) => _fetch(`/v1/lessons/${lesson_id}/progress`, 'PUT', { progress });
 export const submitQuizAttempt = (quiz_id, attemptData) => _fetch(`/v1/quizzes/${quiz_id}/attempts`, 'POST', attemptData);
 
+export const fetchBackendNotes = () => _fetch('/v1/notes', 'GET');
+
 export const uploadFile = async (fileObj) => {
   const token = await getAuthToken();
+
   const formData = new FormData();
   formData.append('file', {
     uri: fileObj.uri,
     name: fileObj.name || 'upload.pdf',
-    type: fileObj.type || 'application/pdf'
+    type: fileObj.mimeType || fileObj.type || 'application/octet-stream',
   });
 
-  const res = await fetch(\/v1/files, {
+  const res = await fetch(`${API_URL}/v1/files`, {
     method: 'POST',
     headers: {
-      'Authorization': Bearer \,
+      'Authorization': `Bearer ${token}`,
+      // Do NOT set Content-Type manually for FormData — fetch sets the boundary
     },
-    body: formData
+    body: formData,
   });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || errorData.message || Upload failed with status \);
+    throw new Error(errorData.error?.message || errorData.message || `Upload failed with status ${res.status}`);
   }
   return await res.json();
 };

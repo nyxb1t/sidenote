@@ -11,7 +11,9 @@ import {
   Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../theme/colors';
+import { supabase } from '../lib/supabaseClient';
 
 let GoogleSignin;
 let statusCodes = {};
@@ -34,16 +36,32 @@ const SignInScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSignIn = () => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSignIn = async () => {
     setError('');
-    
+
     if (!email || !password) {
       setError('Please enter both email and password.');
       return;
     }
 
-    // Success logic
-    navigation.replace('App');
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) {
+        setError(authError.message || 'Sign in failed. Please try again.');
+        return;
+      }
+      if (data?.session?.access_token) {
+        await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
+      navigation.replace('App');
+    } catch (e) {
+      setError(e.message || 'Sign in failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -122,8 +140,8 @@ const SignInScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSignIn} activeOpacity={0.8}>
-              <Text style={styles.primaryButtonText}>Sign In</Text>
+            <TouchableOpacity style={[styles.primaryButton, loading && { opacity: 0.7 }]} onPress={handleSignIn} activeOpacity={0.8} disabled={loading}>
+              <Text style={styles.primaryButtonText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} activeOpacity={0.8}>
