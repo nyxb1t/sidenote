@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,56 @@ import {
   TouchableOpacity,
   TextInput,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import NoteCard from '../components/NoteCard';
-import { NOTES, SUBJECTS } from '../data/mockData';
+import { SUBJECTS } from '../data/mockData';
 import Colors from '../theme/colors';
+import { fetchBackendNotes } from '../services/aiService';
 
 const NotesScreen = ({ navigation }) => {
   const [selectedSubject, setSelectedSubject] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredNotes = NOTES.filter((note) => {
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const result = await fetchBackendNotes();
+        const rows = result?.data || [];
+        if (!cancelled && rows.length > 0) {
+          // Map backend note rows to the shape NoteCard expects
+          const mapped = rows.map((row) => ({
+            id: row.id,
+            title: row.topic || row.title || 'Note',
+            preview: row.summary || row.content?.summary || '',
+            subject: row.subject || 'General',
+            tag: row.tag || 'Concept',
+            updatedAt: row.created_at ? new Date(row.created_at).toLocaleDateString() : '',
+            // keep full content for NoteDetailScreen
+            content: row.content || null,
+            body: null,
+          }));
+          setNotes(mapped);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.warn('Failed to load notes:', e);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredNotes = notes.filter((note) => {
     const matchSubject = selectedSubject === 'All' || note.subject === selectedSubject;
     const matchSearch =
       searchQuery === '' ||
@@ -91,7 +129,11 @@ const NotesScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {filteredNotes.length === 0 ? (
+        {loading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="small" color={Colors.yellow} />
+          </View>
+        ) : filteredNotes.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🗒</Text>
             <Text style={styles.emptyText}>No notes found</Text>
@@ -102,7 +144,7 @@ const NotesScreen = ({ navigation }) => {
             <NoteCard
               key={note.id}
               note={note}
-              onPress={() => navigation.navigate('TopicNotesScreen', { topic: note })}
+              onPress={() => navigation.navigate('NoteDetailScreen', { note, topic: note })}
             />
 
           ))

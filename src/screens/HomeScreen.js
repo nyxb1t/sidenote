@@ -28,6 +28,9 @@ const getGreeting = () => {
   return 'Good evening';
 };
 
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+
 const HomeScreen = ({ navigation }) => {
   const [recentChat, setRecentChat] = useState(null);
   const [syllabusModal, setSyllabusModal] = useState(false);
@@ -39,19 +42,48 @@ const HomeScreen = ({ navigation }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [inputText, setInputText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
-  
+  const [isUploading, setIsUploading] = useState(false);
+
   const [hasSyllabusLoc, setHasSyllabusLoc] = useState(globalState.syllabusHistory.length > 0);
   const [hasNotesLoc, setHasNotesLoc] = useState(globalState.notesHistory.length > 0);
   const [hasAssignmentsLoc, setHasAssignmentsLoc] = useState(globalState.assignmentHistory.length > 0);
 
-  const handleSimulateUpload = (type) => {
-    // Simulate instant upload feeling
-    const mockFile = {
-      name: type === 'PDF' ? 'document_v2.pdf' : 'photo_upload.jpg',
-      type: type === 'PDF' ? 'application/pdf' : 'image/jpeg',
-      uri: 'file:///dummy/path/to/' + (type === 'PDF' ? 'document_v2.pdf' : 'photo_upload.jpg')
-    };
-    setSelectedFile(mockFile);
+  const handlePickPDF = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'text/plain', 'application/msword',
+               'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setSelectedFile({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || 'application/pdf', type: 'PDF' });
+      }
+    } catch (e) {
+      alert('Could not open document picker: ' + (e.message || e));
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Permission to access photos is required to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const ext = asset.uri.split('.').pop() || 'jpg';
+        setSelectedFile({ uri: asset.uri, name: `image_upload.${ext}`, mimeType: asset.mimeType || 'image/jpeg', type: 'Image' });
+      }
+    } catch (e) {
+      alert('Could not open image picker: ' + (e.message || e));
+    }
   };
 
   useFocusEffect(
@@ -244,17 +276,32 @@ const HomeScreen = ({ navigation }) => {
         {/* MODALS */}
         {/* Helper component for modal content to avoid repetition */}
         {[
-          { key: 'syllabus', visible: syllabusModal, setVisible: setSyllabusModal, title: 'Upload Syllabus', onSave: () => { 
+          { key: 'syllabus', visible: syllabusModal, setVisible: setSyllabusModal, title: 'Upload Syllabus', onSave: async () => {
+            if (selectedFile) {
+              setIsUploading(true);
+              try { await uploadFile(selectedFile); } catch (e) { console.warn('File upload failed:', e.message); }
+              setIsUploading(false);
+            }
             addSyllabus({ id: Date.now().toString(), text: inputText, file: selectedFile, date: new Date().toLocaleDateString() });
             setSyllabusModal(false); 
             navigation.navigate('SyllabusHistoryScreen'); 
           } },
-          { key: 'notes', visible: notesModal, setVisible: setNotesModal, title: 'Upload Notes', onSave: () => { 
+          { key: 'notes', visible: notesModal, setVisible: setNotesModal, title: 'Upload Notes', onSave: async () => {
+            if (selectedFile) {
+              setIsUploading(true);
+              try { await uploadFile(selectedFile); } catch (e) { console.warn('File upload failed:', e.message); }
+              setIsUploading(false);
+            }
             addNotes({ id: Date.now().toString(), text: inputText, file: selectedFile, date: new Date().toLocaleDateString() });
             setNotesModal(false); 
             navigation.navigate('NotesHistoryScreen'); 
           } },
-          { key: 'assignment', visible: assignmentModal, setVisible: setAssignmentModal, title: 'New Assignment', onSave: () => { 
+          { key: 'assignment', visible: assignmentModal, setVisible: setAssignmentModal, title: 'New Assignment', onSave: async () => {
+            if (selectedFile) {
+              setIsUploading(true);
+              try { await uploadFile(selectedFile); } catch (e) { console.warn('File upload failed:', e.message); }
+              setIsUploading(false);
+            }
             addAssignment({ id: Date.now().toString(), text: inputText, file: selectedFile, date: new Date().toLocaleDateString() });
             setAssignmentModal(false); 
             navigation.navigate('AssignmentChatScreen'); 
@@ -268,11 +315,11 @@ const HomeScreen = ({ navigation }) => {
 
                 {!selectedFile ? (
                   <View style={styles.uploadOptionsRow}>
-                    <TouchableOpacity style={styles.uploadOptionBtn} onPress={() => handleSimulateUpload('PDF')}>
+                    <TouchableOpacity style={styles.uploadOptionBtn} onPress={handlePickPDF}>
                       <Ionicons name="document-text-outline" size={24} color={Colors.yellow} />
-                      <Text style={styles.uploadOptionText}>PDF</Text>
+                      <Text style={styles.uploadOptionText}>PDF / Doc</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadOptionBtn} onPress={() => handleSimulateUpload('Image')}>
+                    <TouchableOpacity style={styles.uploadOptionBtn} onPress={handlePickImage}>
                       <Ionicons name="image-outline" size={24} color={Colors.yellow} />
                       <Text style={styles.uploadOptionText}>Image</Text>
                     </TouchableOpacity>
@@ -303,12 +350,12 @@ const HomeScreen = ({ navigation }) => {
                     <Text style={styles.modalBtnTextCancel}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={[styles.modalBtnSubmit, (!inputText.trim() && !selectedFile) && styles.submitDisabled]} 
-                    disabled={!inputText.trim() && !selectedFile}
+                    style={[styles.modalBtnSubmit, ((!inputText.trim() && !selectedFile) || isUploading) && styles.submitDisabled]} 
+                    disabled={(!inputText.trim() && !selectedFile) || isUploading}
                     onPress={() => { modalData.onSave(); setSelectedFile(null); }}
                   >
-                    <Text style={[styles.modalBtnTextSubmit, (!inputText.trim() && !selectedFile) && styles.submitTextDisabled]}>
-                      {modalData.key === 'assignment' ? 'Submit' : 'Save'}
+                    <Text style={[styles.modalBtnTextSubmit, ((!inputText.trim() && !selectedFile) || isUploading) && styles.submitTextDisabled]}>
+                      {isUploading ? 'Uploading...' : (modalData.key === 'assignment' ? 'Submit' : 'Save')}
                     </Text>
                   </TouchableOpacity>
                 </View>

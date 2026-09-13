@@ -11,7 +11,9 @@ import {
   Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../theme/colors';
+import { supabase } from '../lib/supabaseClient';
 
 let GoogleSignin;
 let statusCodes = {};
@@ -22,7 +24,7 @@ try {
   
   // Configure Google Sign-In safely (prevents crashes in Expo Go)
   GoogleSignin.configure({
-    webClientId: 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com',
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com',
     offlineAccess: true,
   });
 } catch (e) {
@@ -35,14 +37,16 @@ const SignUpScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSignUp = () => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSignUp = async () => {
     setError('');
-    
+
     if (!email || !password || !confirmPassword) {
       setError('All fields are required.');
       return;
     }
-    
+
     // Basic email format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -60,8 +64,26 @@ const SignUpScreen = ({ navigation }) => {
       return;
     }
 
-    // Success logic
-    navigation.replace('OnboardingScreen');
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({ email, password });
+      if (authError) {
+        setError(authError.message || 'Sign up failed. Please try again.');
+        return;
+      }
+      // If email confirmation is required, session may be null
+      if (data?.session?.access_token) {
+        await AsyncStorage.setItem('supabase_token', data.session.access_token);
+        navigation.replace('OnboardingScreen');
+      } else {
+        // Email confirmation pending — inform user and let them sign in after confirming
+        setError('Account created! Please check your email to confirm, then sign in.');
+      }
+    } catch (e) {
+      setError(e.message || 'Sign up failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignUp = async () => {
@@ -73,7 +95,26 @@ const SignUpScreen = ({ navigation }) => {
       }
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      console.log('Google User Info:', userInfo);
+      const idToken = userInfo.idToken || userInfo.data?.idToken;
+      
+      if (!idToken) {
+        throw new Error('No ID token present!');
+      }
+      
+      const { data, error: authError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+
+      if (authError) {
+        setError(authError.message || 'Google Sign-Up failed.');
+        return;
+      }
+
+      if (data?.session?.access_token) {
+        await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
+      
       // Success logic - navigate to GettingStarted
       navigation.replace('OnboardingScreen');
     } catch (error) {
@@ -86,7 +127,7 @@ const SignUpScreen = ({ navigation }) => {
         setError('Google Play Services not available');
       } else {
         // some other error happened
-        setError(error.message || 'Google Sign-In failed');
+        setError(error.message || 'Google Sign-Up failed');
       }
     }
   };
@@ -152,8 +193,8 @@ const SignUpScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp} activeOpacity={0.8}>
-              <Text style={styles.primaryButtonText}>Create Account</Text>
+            <TouchableOpacity style={[styles.primaryButton, loading && { opacity: 0.7 }]} onPress={handleSignUp} activeOpacity={0.8} disabled={loading}>
+              <Text style={styles.primaryButtonText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignUp} activeOpacity={0.8}>
