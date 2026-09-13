@@ -4,19 +4,44 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import ProgressBar from '../components/ProgressBar';
-import { THREADS } from '../data/mockData';
 import { globalState, removeChat } from '../data/globalState';
 import Colors from '../theme/colors';
+import { fetchBackendLessons } from '../services/aiService';
 
 export default function ContinueLearningScreen({ navigation }) {
   const [inProgressTopics, setInProgressTopics] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      const active = THREADS.filter(
-        t => t.progress > 0 && t.progress < 1 && !globalState.deletedChats.includes(t.id)
-      );
-      setInProgressTopics(active);
+      let cancelled = false;
+      const load = async () => {
+        setLoading(true);
+        try {
+          const result = await fetchBackendLessons();
+          const rows = result?.data || [];
+          if (!cancelled) {
+            // Transform rows into expected shape for UI
+            const active = rows.map(r => ({
+              id: r.id,
+              subject: r.topic || 'General',
+              title: r.topic || 'Untitled',
+              progress: r.progress || 0.1, // mock a default progress if 0 so it shows up in "in progress"
+              timeAgo: r.updated_at ? new Date(r.updated_at).toLocaleDateString() : 'recently',
+              color: '#34C759', // default green
+              topicId: r.id,
+              initialMessage: r.content?.overview || 'Ready to learn',
+            })).filter(t => !globalState.deletedChats.includes(t.id));
+            setInProgressTopics(active);
+          }
+        } catch (e) {
+          if (!cancelled) console.warn('Failed to load lessons', e);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+      load();
+      return () => { cancelled = true; };
     }, [])
   );
 

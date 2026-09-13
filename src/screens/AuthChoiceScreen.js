@@ -9,12 +9,15 @@ try {
   GoogleSignin = GSI.GoogleSignin;
   // Make sure to call configure early, or it can be called here
   GoogleSignin.configure({
-    webClientId: 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com',
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com',
     offlineAccess: true,
   });
 } catch (e) {
   // Ignored in Expo Go
 }
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabaseClient';
 
 const AuthChoiceScreen = ({ navigation }) => {
   // Mock function to determine if this is a first-time user
@@ -34,12 +37,29 @@ const AuthChoiceScreen = ({ navigation }) => {
     try {
       if (!GoogleSignin) {
         console.warn('Google Sign-In is not available in Expo Go. Use a dev build.');
-        handleAuthSuccess();
         return;
       }
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      console.log('Google User Info:', userInfo);
+      const idToken = userInfo.idToken || userInfo.data?.idToken;
+      
+      if (!idToken) {
+        throw new Error('No ID token present!');
+      }
+      
+      const { data, error: authError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+
+      if (authError) {
+        console.error('Google Sign-In failed.', authError.message);
+        return;
+      }
+
+      if (data?.session?.access_token) {
+        await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
       
       handleAuthSuccess();
     } catch (error) {

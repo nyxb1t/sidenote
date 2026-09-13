@@ -1,41 +1,4 @@
-import { THREADS, NOTES, TOPIC_NOTES, USER } from './mockData';
-
-// Helper to construct initial default blocks for existing threads
-const getInitialBlocksForThread = (thread) => {
-  // Find matching note topic if any
-  const noteTopic = NOTES.find(n => n.title.toLowerCase() === thread.title.toLowerCase() || n.id === thread.topicId);
-  if (noteTopic && TOPIC_NOTES[noteTopic.id] && TOPIC_NOTES[noteTopic.id].length > 0) {
-    const rawNotes = TOPIC_NOTES[noteTopic.id];
-    return rawNotes.map((n, idx) => ({
-      id: `b-${thread.id}-${idx}`,
-      type: idx === rawNotes.length - 1 ? 'think' : 'paragraph',
-      text: n.body,
-      question: idx === rawNotes.length - 1 ? `Key takeaway for ${n.title}?` : undefined,
-      hint: idx === rawNotes.length - 1 ? n.preview : undefined,
-      answer: idx === rawNotes.length - 1 ? n.body : undefined,
-    }));
-  }
-
-  return [
-    {
-      id: `b-${thread.id}-1`,
-      type: 'paragraph',
-      text: thread.preview || `Learning session for ${thread.title}.`,
-    },
-  ];
-};
-
-// Initial chat sessions seeded from THREADS
-const initialSessions = THREADS.map((t, index) => ({
-  ...t,
-  topicId: t.topicId || (t.id === 't1' ? '1' : t.id),
-  subtitle: t.subtitle || (t.title === 'Dynamic Programming' ? 'Memoisation' : t.preview?.split('—')[0]?.trim() || 'Notes'),
-  timestamp: Date.now() - (index * 3600 * 1000 * (t.pinned ? 1 : 24)),
-  userNotes: [],
-  blocks: getInitialBlocksForThread(t),
-  bookmarked: t.pinned || false,
-  stickyNotes: [],
-}));
+import { USER } from './mockData';
 
 export const globalState = {
   syllabusHistory: [],
@@ -43,7 +6,7 @@ export const globalState = {
   testHistory: [],
   assignmentHistory: [],
   deletedChats: [],
-  chatSessions: initialSessions,
+  chatSessions: [],
   currentPlan: 'Free',
   credits: 20,
   examMode: false,

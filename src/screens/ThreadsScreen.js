@@ -151,10 +151,42 @@ const ThreadsScreen = ({ navigation }) => {
   const [query, setQuery]               = useState('');
   const [expandedFolders, setExpanded]  = useState({ DSA: true }); // DSA open by default
   const [chatSessions, setChatSessions] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      setChatSessions(globalState.chatSessions.filter(c => !globalState.deletedChats.includes(c.id)));
+      let cancelled = false;
+      const load = async () => {
+        setLoading(true);
+        try {
+          const { fetchBackendLessons } = require('../services/aiService');
+          const result = await fetchBackendLessons();
+          const rows = result?.data || [];
+          if (!cancelled) {
+            const mapped = rows.map(r => ({
+              id: r.id,
+              subject: r.topic || 'General',
+              title: r.topic || 'Untitled',
+              preview: r.content?.overview || 'Ready to learn.',
+              progress: r.progress || 0,
+              pinned: r.pinned || false,
+              topicId: r.id,
+              bookmarked: r.pinned || false,
+            })).filter(c => !globalState.deletedChats.includes(c.id));
+            setChatSessions(mapped);
+          }
+        } catch (e) {
+          if (!cancelled) {
+            console.warn('Failed to load threads', e);
+            // fallback to any local cached sessions if API fails
+            setChatSessions(globalState.chatSessions.filter(c => !globalState.deletedChats.includes(c.id)));
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+      load();
+      return () => { cancelled = true; };
     }, [])
   );
 

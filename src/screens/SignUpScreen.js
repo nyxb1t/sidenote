@@ -24,7 +24,7 @@ try {
   
   // Configure Google Sign-In safely (prevents crashes in Expo Go)
   GoogleSignin.configure({
-    webClientId: 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com',
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com',
     offlineAccess: true,
   });
 } catch (e) {
@@ -95,7 +95,26 @@ const SignUpScreen = ({ navigation }) => {
       }
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      console.log('Google User Info:', userInfo);
+      const idToken = userInfo.idToken || userInfo.data?.idToken;
+      
+      if (!idToken) {
+        throw new Error('No ID token present!');
+      }
+      
+      const { data, error: authError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+
+      if (authError) {
+        setError(authError.message || 'Google Sign-Up failed.');
+        return;
+      }
+
+      if (data?.session?.access_token) {
+        await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
+      
       // Success logic - navigate to GettingStarted
       navigation.replace('OnboardingScreen');
     } catch (error) {
@@ -108,7 +127,7 @@ const SignUpScreen = ({ navigation }) => {
         setError('Google Play Services not available');
       } else {
         // some other error happened
-        setError(error.message || 'Google Sign-In failed');
+        setError(error.message || 'Google Sign-Up failed');
       }
     }
   };

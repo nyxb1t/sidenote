@@ -44,6 +44,21 @@ export const supabase = {
       }
     },
 
+    signInWithIdToken: async ({ provider, token }) => {
+      try {
+        const json = await authFetch('/token?grant_type=id_token', { provider, id_token: token });
+        return {
+          data: {
+            session: { access_token: json.access_token, refresh_token: json.refresh_token },
+            user: json.user,
+          },
+          error: null,
+        };
+      } catch (e) {
+        return { data: null, error: e };
+      }
+    },
+
     signUp: async ({ email, password }) => {
       try {
         const json = await authFetch('/signup', { email, password });

@@ -52,6 +52,7 @@ export const updateLessonProgress = (lesson_id, progress) => _fetch(`/v1/lessons
 export const submitQuizAttempt = (quiz_id, attemptData) => _fetch(`/v1/quizzes/${quiz_id}/attempts`, 'POST', attemptData);
 
 export const fetchBackendNotes = () => _fetch('/v1/notes', 'GET');
+export const fetchBackendLessons = () => _fetch('/v1/lessons', 'GET');
 
 export const uploadFile = async (fileObj) => {
   const token = await getAuthToken();

@@ -1,13 +1,32 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { globalState } from '../data/globalState';
+import { fetchBackendLessons } from '../services/aiService';
 import Colors from '../theme/colors';
 
 export default function TopicSelectionScreen({ navigation }) {
-  // Use actual generated lessons from global state
-  const sessions = globalState.chatSessions || [];
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const result = await fetchBackendLessons();
+        if (!cancelled && result?.data) {
+          setSessions(result.data);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch lessons', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -20,18 +39,24 @@ export default function TopicSelectionScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.listContainer}>
-        {sessions.map((session, i) => (
-          <TouchableOpacity
-            key={i}
-            style={styles.topicCard}
-            onPress={() => navigation.navigate('QuizScreen', { topic: session.title, lesson_id: session.topicId })}
-          >
-            <Text style={styles.topicText}>{session.title}</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
-          </TouchableOpacity>
-        ))}
-        {sessions.length === 0 && (
-          <Text style={{color: Colors.textMuted, textAlign: 'center', marginTop: 20}}>No lessons found. Generate a lesson first!</Text>
+        {loading ? (
+          <ActivityIndicator size="small" color={Colors.yellow} style={{marginTop: 20}} />
+        ) : (
+          <>
+            {sessions.map((session, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.topicCard}
+                onPress={() => navigation.navigate('QuizScreen', { topic: session.topic, lesson_id: session.id })}
+              >
+                <Text style={styles.topicText}>{session.topic}</Text>
+                <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+            {sessions.length === 0 && (
+              <Text style={{color: Colors.textMuted, textAlign: 'center', marginTop: 20}}>No lessons found. Generate a lesson first!</Text>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>

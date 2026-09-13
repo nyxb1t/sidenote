@@ -12,14 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import NoteCard from '../components/NoteCard';
-import { NOTES, SUBJECTS } from '../data/mockData';
+import { SUBJECTS } from '../data/mockData';
 import Colors from '../theme/colors';
 import { fetchBackendNotes } from '../services/aiService';
 
 const NotesScreen = ({ navigation }) => {
   const [selectedSubject, setSelectedSubject] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [notes, setNotes] = useState(NOTES);
+  const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -44,8 +44,10 @@ const NotesScreen = ({ navigation }) => {
           }));
           setNotes(mapped);
         }
-      } catch {
-        // silently fall back to mock data
+      } catch (e) {
+        if (!cancelled) {
+          console.warn('Failed to load notes:', e);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -142,7 +144,7 @@ const NotesScreen = ({ navigation }) => {
             <NoteCard
               key={note.id}
               note={note}
-              onPress={() => navigation.navigate('TopicNotesScreen', { topic: note })}
+              onPress={() => navigation.navigate('NoteDetailScreen', { note, topic: note })}
             />
 
           ))
