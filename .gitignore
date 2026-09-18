@@ -12,3 +12,4 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 .env
+backend/.env.example
