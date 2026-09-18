@@ -24,10 +24,10 @@
 // Load environment variables from backend/.env
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
-const { generateLesson }   = require('./ai/lessonService');
-const { validateLesson }   = require('./ai/validators/lessonValidator');
-const { validateQuiz }     = require('./ai/validators/quizValidator');
-const { ValidationError }  = require('./ai/validators/ValidationError');
+const { generateLesson }   = require('./ai/lessonService.cjs');
+const { validateLesson }   = require('./ai/validators/lessonValidator.cjs');
+const { validateQuiz }     = require('./ai/validators/quizValidator.cjs');
+const { ValidationError }  = require('./ai/validators/ValidationError.cjs');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

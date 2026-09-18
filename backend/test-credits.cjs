@@ -12,10 +12,10 @@
  *   node backend/test-credits.js
  */
 
-const { getCreditCost, CREDIT_COSTS }  = require('./monetization/creditRules');
-const { checkEntitlement }             = require('./monetization/entitlementGuard');
-const { InsufficientCreditsError }     = require('./monetization/InsufficientCreditsError');
-const { generateLesson }               = require('./ai/lessonService');
+const { getCreditCost, CREDIT_COSTS }  = require('./monetization/creditRules.cjs');
+const { checkEntitlement }             = require('./monetization/entitlementGuard.cjs');
+const { InsufficientCreditsError }     = require('./monetization/InsufficientCreditsError.cjs');
+const { generateLesson }               = require('./ai/lessonService.cjs');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

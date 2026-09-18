@@ -2,12 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Colors from '../theme/colors';
 
-const StatCard = ({ value, label }) => (
-  <View style={styles.card}>
-    <Text style={styles.value}>{value}</Text>
-    <Text style={styles.label}>{label}</Text>
-  </View>
-);
+const StatCard = ({ value, label }) => {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.value}>{value}</Text>
+      <Text style={styles.label}>{label}</Text>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   card: {

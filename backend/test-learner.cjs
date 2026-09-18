@@ -12,9 +12,9 @@
  *   node backend/test-learner.js
  */
 
-const { updateLearnerModel, selectTeachingStrategy } = require('./learner/learnerService');
-const { getAdaptedDifficulty, shouldUseAnalogy }     = require('./learner/adaptationService');
-const { buildLessonPrompt }                          = require('./ai/prompts/lessonPrompt');
+const { updateLearnerModel, selectTeachingStrategy } = require('./learner/learnerService.cjs');
+const { getAdaptedDifficulty, shouldUseAnalogy }     = require('./learner/adaptationService.cjs');
+const { buildLessonPrompt }                          = require('./ai/prompts/lessonPrompt.cjs');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

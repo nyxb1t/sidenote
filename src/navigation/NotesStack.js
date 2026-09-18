@@ -19,9 +19,9 @@ const Stack = createNativeStackNavigator();
 
 const NotesStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="NotesArchive"  component={NotesScreen}      />
-    <Stack.Screen name="TopicNotes"    component={TopicNotesScreen} />
-    <Stack.Screen name="NoteDetail"    component={NoteDetailScreen} />
+    <Stack.Screen name="NotesScreen"       component={NotesScreen}      />
+    <Stack.Screen name="TopicNotesScreen"  component={TopicNotesScreen} />
+    <Stack.Screen name="NoteDetailScreen"  component={NoteDetailScreen} />
   </Stack.Navigator>
 );
 

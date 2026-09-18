@@ -2,15 +2,11 @@
   "expo": {
     "name": "Sidenote",
     "slug": "sidenote",
+    "scheme": "sidenote",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1C1C1E"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sidenote.app"
@@ -26,7 +22,22 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
-    ]
+      "expo-font",
+      "@react-native-google-signin/google-signin",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#1C1C1E"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a94f5ab1-5185-4865-babe-82fad64b3382"
+      }
+    }
   }
 }
