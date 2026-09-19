@@ -188,7 +188,7 @@ export default function QuizScreen({ navigation, route }) {
             <Ionicons name="checkmark-circle" size={48} color={Colors.yellow} />
             <Text style={styles.resultTitle}>Test Completed!</Text>
             <Text style={styles.resultText}>You scored {Math.round(quizScore * 100)}%.</Text>
-            <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.navigate('HomeStack')}>
+            <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.goBack()}>
               <Text style={styles.doneBtnText}>Back to Home</Text>
             </TouchableOpacity>
           </View>

@@ -144,6 +144,7 @@ const HomeScreen = ({ navigation }) => {
       navigation.navigate('ChatStack', {
         screen: 'Chat',
         params: {
+          chatId: session.id,
           topicId: session.id,
           topicTitle: session.title,
           isNewChat: false,
@@ -215,6 +216,7 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('ChatStack', {
               screen: 'Chat',
               params: {
+                chatId: recentChat?.id,
                 topicId: recentChat?.topicId || recentChat?.id,
                 topicTitle: recentChat?.title,
                 isNewChat: false,

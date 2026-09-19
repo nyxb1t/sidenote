@@ -83,13 +83,10 @@ export const getMostRecentChatForTopic = (topicId, topicTitle) => {
  * Creates and registers a new chat session for a topic.
  */
 export const createChatForTopic = ({ topicId, topicTitle, subject, subtitle }) => {
-  const matchedNote = NOTES.find(n => 
-    (topicId && String(n.id) === String(topicId)) || 
-    (topicTitle && n.title.toLowerCase() === topicTitle.toLowerCase())
-  );
+  const matchedNote = null;
 
-  const title = topicTitle || matchedNote?.title || 'New Topic';
-  const finalSubject = subject || matchedNote?.subject || 'Study';
+  const title = topicTitle || 'New Topic';
+  const finalSubject = subject || 'Study';
   const finalSubtitle = subtitle || 'New conversation';
 
   const newChat = {

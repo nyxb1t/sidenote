@@ -55,6 +55,12 @@ const BottomTabNavigator = () => {
             <TabIcon name="chatbubble-outline" label="chats" focused={focused} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('ChatStack', { screen: 'Threads' });
+          },
+        })}
       />
       <Tab.Screen
         name="NotesStack"
