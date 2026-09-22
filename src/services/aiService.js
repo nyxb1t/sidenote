@@ -1,10 +1,15 @@
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+console.log("API_URL:", API_URL);
+console.log("ENV:", process.env.EXPO_PUBLIC_API_URL);
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
+//const API_URL = "http://10.64.248.61:3000";
 // Prefer EXPO_PUBLIC_API_URL env var; fall back to platform-specific localhost for dev
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000');
+// const API_URL =
+//   process.env.EXPO_PUBLIC_API_URL ||
+//   (Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000');
 
 const getAuthToken = async () => {
   try {
@@ -55,27 +60,26 @@ export const fetchBackendNotes = () => _fetch('/v1/notes', 'GET');
 export const fetchBackendLessons = () => _fetch('/v1/lessons', 'GET');
 
 export const uploadFile = async (fileObj) => {
-  const token = await getAuthToken();
+  if (!fileObj || !fileObj.uri) {
+    throw new Error('Invalid file selected');
+  }
+
+  const fileResponse = await fetch(fileObj.uri);
+  const blob = await fileResponse.blob();
 
   const formData = new FormData();
-  formData.append('file', {
-    uri: fileObj.uri,
-    name: fileObj.name || 'upload.pdf',
-    type: fileObj.mimeType || fileObj.type || 'application/octet-stream',
-  });
+  formData.append('file', blob, fileObj.name || 'upload.jpg');
 
   const res = await fetch(`${API_URL}/v1/files`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      // Do NOT set Content-Type manually for FormData — fetch sets the boundary
-    },
     body: formData,
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || errorData.message || `Upload failed with status ${res.status}`);
+    const text = await res.text().catch(() => '');
+    console.log("UPLOAD ERROR:", text);
+    throw new Error("Upload failed. Try again.");
   }
+
   return await res.json();
 };

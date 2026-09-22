@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import HomeStack     from './HomeStack';
@@ -28,11 +29,26 @@ const TabIcon = ({ name, label, focused }) => {
 };
 
 const BottomTabNavigator = () => {
+  const insets = useSafeAreaInsets();
+
+  const isAndroid = Platform.OS === 'android';
+  const bottomPadding = insets.bottom > 0
+    ? (isAndroid ? insets.bottom + 6 : insets.bottom)
+    : (isAndroid ? 12 : 8);
+  const navBarHeight = 54 + bottomPadding;
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: navBarHeight,
+            paddingBottom: bottomPadding,
+            paddingTop: 8,
+          },
+        ],
         tabBarShowLabel: false,
         tabBarHideOnKeyboard: true,
       }}
@@ -55,6 +71,12 @@ const BottomTabNavigator = () => {
             <TabIcon name="chatbubble-outline" label="chats" focused={focused} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('ChatStack', { screen: 'Threads' });
+          },
+        })}
       />
       <Tab.Screen
         name="NotesStack"
@@ -84,10 +106,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceHigh,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    // No fixed height — React Navigation reads safeAreaInsets from SafeAreaProvider
-    // and adds the correct bottom padding for system nav bars automatically
-    paddingTop: 8,
-    paddingBottom: 8,
     elevation: 0,
     shadowOpacity: 0,
   },

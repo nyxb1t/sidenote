@@ -325,7 +325,7 @@ if (id === 'note') {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'practice') {
-      navigation.navigate('HomeStack', { screen: 'QuizScreen', params: { topic: chatSession?.title, lesson_id: route.params.topicId } });
+      navigation.navigate('HomeStack', { screen: 'QuizScreen', params: { topic: chatSession?.title, lesson_id: route?.params?.topicId || chatSession?.topicId || chatSession?.id } });
     } else if (id === 'examples') {
       setMessages(prev => [
         ...prev,
