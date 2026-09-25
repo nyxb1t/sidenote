@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
 
 import SplashScreen from './src/screens/SplashScreen';
 import AuthChoiceScreen from './src/screens/AuthChoiceScreen';
@@ -15,6 +16,14 @@ import Colors from './src/theme/colors';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    PatrickHand: require('./assets/fonts/PatrickHand-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" backgroundColor={Colors.bg} />

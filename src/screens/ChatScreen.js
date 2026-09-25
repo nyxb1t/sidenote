@@ -13,24 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-import {
-  globalState,
-  getMostRecentChatForTopic,
-  createChatForTopic,
-  saveChatNote,
-  saveStickyNotes,
-  getStickyNotes,
-  setChatSessionBookmarked
-} from '../data/globalState';
-
-import {
-  generateNotes,
-  generateRetryExplanation,
-  trackLearnerEvent,
-  updateLessonProgress
-} from '../services/aiService';
-
+import { useFonts } from 'expo-font';
+// Removed NOTEBOOK_CONTENT import
+import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote, saveStickyNotes, getStickyNotes } from '../data/globalState';
 import DraggableStickyNote from '../components/DraggableStickyNote';
 import StickyNoteToolbar from '../components/StickyNoteToolbar';
 import Colors from '../theme/colors';
@@ -42,7 +27,7 @@ const PANEL_ACTIONS = [
   { id: 'examples', icon: 'book-outline',           label: 'More\nexamples'    },
   { id: 'practice', icon: 'barbell-outline',        label: 'Practice\nquestions' },
   { id: 'retry',    icon: 'refresh-outline',        label: 'Try\nagain'        },
-  { id: 'notes',    icon: 'document-text-outline',  label: 'Generate\nNotes'   },
+  { id: 'note',     icon: 'create-outline',         label: 'Sticky\nnote'      },
 ];
 
 // ─── Panel heights ─────────────────────────────────────────────────────────────
@@ -120,6 +105,10 @@ const ChatScreen = ({ navigation, route }) => {
   const [inputText, setInputText] = useState('');
   const [bookmarked, setBookmarked] = useState(chatSession?.bookmarked || false);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    PatrickHand: require('../../assets/fonts/PatrickHand-Regular.ttf'),
+  });
 
   // ── Sticky notes state ───────────────────────────────────────────────────
   const [stickyNotes, setStickyNotes] = useState(() =>
@@ -214,14 +203,10 @@ const ChatScreen = ({ navigation, route }) => {
       id: `note_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       offsetX: 20 + stagger,
       offsetY: 20 + stagger,
-      width: 165,
-      height: 165,
+      width: 200,
+      height: 200,
       text: '',
       color: '#FDEE87',
-      strokes: [],
-      mode: 'text',
-      penColor: '#1a1a1a',
-      penThickness: 2,
     };
     setStickyNotes((prev) => {
       const next = [...prev, newNote];
@@ -288,36 +273,8 @@ const ChatScreen = ({ navigation, route }) => {
   // ── Handle panel action — APPEND-ONLY to messages ────────────────────────
   const handlePanelAction = (id) => {
     collapsePanel();
-if (id === 'note') {
-  addStickyNote();
-
-} else if (id === 'notes') {
-
-  const fetchNotes = async () => {
-    try {
-      const lessonId = chatSession?.topicId || route.params?.topicId;
-      if (!lessonId) {
-        alert('No lesson ID available. Please generate a lesson first.');
-        return;
-      }
-      const result = await generateNotes(lessonId);
-      const note = result.data || result;
-
-      note.updatedAt = new Date().toLocaleDateString();
-      note.title = note.topic || chatSession?.title || 'Notes';
-
-      navigation.navigate('NotesStack', {
-        screen: 'NoteDetailScreen',
-        params: { note: note, topic: { title: note.title } }
-      });
-
-    } catch (err) {
-      alert(err.message || 'Error generating notes');
-    }
-  };
-
-  fetchNotes();
-  
+    if (id === 'note') {
+      addStickyNote();
     } else if (id === 'visual') {
       setMessages(prev => [
         ...prev,
@@ -325,7 +282,20 @@ if (id === 'note') {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'practice') {
-      navigation.navigate('HomeStack', { screen: 'QuizScreen', params: { topic: chatSession?.title, lesson_id: route?.params?.topicId || chatSession?.topicId || chatSession?.id } });
+      const q = PRACTICE_QUESTIONS[Math.floor(Math.random() * PRACTICE_QUESTIONS.length)];
+      setMessages(prev => [
+        ...prev,
+        {
+          id: 'practice-' + Date.now(),
+          type: 'practice',
+          timestamp: Date.now(),
+          question: q.question,
+          options: q.options,
+          correctKey: q.correctKey,
+          explanations: q.explanations,
+        },
+      ]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'examples') {
       setMessages(prev => [
         ...prev,
@@ -344,37 +314,20 @@ if (id === 'note') {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'retry') {
-      const fetchRetry = async () => {
-        try {
-          setMessages(prev => [...prev, { id: 'retry-loading', type: 'block', timestamp: Date.now(), block: { id: 'r-load', type: 'paragraph', text: 'Thinking of a different way to explain...' } }]);
-          
-          const previous_strategy = chatSession?.teachingStrategy || 'step-by-step';
-          const topicStr = chatSession?.title || 'this topic';
-          const result = await generateRetryExplanation(topicStr, previous_strategy);
-          const retryObj = result.data || result;
-          
-          await trackLearnerEvent({
-            type: 'retry_requested',
-            topic: topicStr,
-            strategyUsed: retryObj.strategy || previous_strategy
-          });
-          
-          setMessages(prev => {
-            const withoutLoading = prev.filter(m => m.id !== 'retry-loading');
-            if (retryObj.content && Array.isArray(retryObj.content)) {
-              return [...withoutLoading, ...retryObj.content];
-            } else if (retryObj.explanation) {
-              return [...withoutLoading, { id: 'retry-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'r-' + Date.now(), type: 'paragraph', text: retryObj.explanation } }];
-            }
-            return withoutLoading;
-          });
-          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
-        } catch (err) {
-          alert(err.message || 'Error fetching explanation');
-          setMessages(prev => prev.filter(m => m.id !== 'retry-loading'));
-        }
-      };
-      fetchRetry();
+      setMessages(prev => [
+        ...prev,
+        {
+          id: 'b-re-' + Date.now(),
+          type: 'block',
+          timestamp: Date.now(),
+          block: {
+            id: 'b-re-' + Date.now(),
+            type: 'paragraph',
+            text: "Let me explain that differently: Memoisation is just caching. Imagine if you had to recalculate 12 × 12 every time someone asked you. Instead, you just memorize it. That's memoisation.",
+          },
+        },
+      ]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     }
   };
 
@@ -433,28 +386,6 @@ if (id === 'note') {
   };
 
   const isThreadEmpty = messages.length === 0;
-
-  useEffect(() => {
-    if (route.params?.topicId) {
-      updateLessonProgress(route.params.topicId, { status: 'in_progress', progress: 0.5 }).catch(console.error);
-    }
-  }, [route.params?.topicId]);
-
-  const handleScroll = (event) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const isBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
-    if (isBottom && !scrollRef.current?.hasMarkedComplete) {
-      scrollRef.current.hasMarkedComplete = true;
-      if (route.params?.topicId) {
-        updateLessonProgress(route.params.topicId, { status: 'completed', progress: 1 }).catch(console.error);
-        trackLearnerEvent({ type: 'lesson_complete', topic: chatSession?.title }).catch(console.error);
-        
-        // update local state
-        if (chatSession) chatSession.progress = 1;
-      }
-    }
-  };
-
 
   // ── Opacity interpolation for labels (collapsed → expanded) ──────────────
   const labelOpacity = panelAnim.interpolate({
@@ -530,12 +461,12 @@ if (id === 'note') {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-onScrollBeginDrag={() => {
-  collapsePanel();
-  if (activeNoteId) setActiveNoteId(null);
-}}
-onScroll={handleScroll}
-scrollEventThrottle={16}
+          onScrollBeginDrag={() => {
+            collapsePanel();
+            // Tapping outside a note deactivates it
+            if (activeNoteId) setActiveNoteId(null);
+          }}
+          scrollEventThrottle={16}
           // ↓ Disable scroll while user is dragging or resizing a note
           scrollEnabled={!isDraggingNote}
         >
@@ -619,7 +550,7 @@ scrollEventThrottle={16}
             placed via offsetX/offsetY relative to this layer.
             Height is large enough to contain all note positions.
           */}
-          {stickyNotes.length > 0 && (
+          {stickyNotes.length > 0 && fontsLoaded && (
             <View
               style={styles.noteLayer}
               // Tap on the empty area of the note layer (not on a note) → deactivate
