@@ -1,4 +1,41 @@
-import { USER } from './mockData';
+import { THREADS, NOTES, TOPIC_NOTES, USER } from './mockData';
+
+// Helper to construct initial default blocks for existing threads
+const getInitialBlocksForThread = (thread) => {
+  // Find matching note topic if any
+  const noteTopic = NOTES.find(n => n.title.toLowerCase() === thread.title.toLowerCase() || n.id === thread.topicId);
+  if (noteTopic && TOPIC_NOTES[noteTopic.id] && TOPIC_NOTES[noteTopic.id].length > 0) {
+    const rawNotes = TOPIC_NOTES[noteTopic.id];
+    return rawNotes.map((n, idx) => ({
+      id: `b-${thread.id}-${idx}`,
+      type: idx === rawNotes.length - 1 ? 'think' : 'paragraph',
+      text: n.body,
+      question: idx === rawNotes.length - 1 ? `Key takeaway for ${n.title}?` : undefined,
+      hint: idx === rawNotes.length - 1 ? n.preview : undefined,
+      answer: idx === rawNotes.length - 1 ? n.body : undefined,
+    }));
+  }
+
+  return [
+    {
+      id: `b-${thread.id}-1`,
+      type: 'paragraph',
+      text: thread.preview || `Learning session for ${thread.title}.`,
+    },
+  ];
+};
+
+// Initial chat sessions seeded from THREADS
+const initialSessions = THREADS.map((t, index) => ({
+  ...t,
+  topicId: t.topicId || (t.id === 't1' ? '1' : t.id),
+  subtitle: t.subtitle || (t.title === 'Dynamic Programming' ? 'Memoisation' : t.preview?.split('—')[0]?.trim() || 'Notes'),
+  timestamp: Date.now() - (index * 3600 * 1000 * (t.pinned ? 1 : 24)),
+  userNotes: [],
+  blocks: getInitialBlocksForThread(t),
+  bookmarked: t.pinned || false,
+  stickyNotes: [],
+}));
 
 export const globalState = {
   syllabusHistory: [],
@@ -6,7 +43,7 @@ export const globalState = {
   testHistory: [],
   assignmentHistory: [],
   deletedChats: [],
-  chatSessions: [],
+  chatSessions: initialSessions,
   currentPlan: 'Free',
   credits: 20,
   examMode: false,
@@ -83,10 +120,13 @@ export const getMostRecentChatForTopic = (topicId, topicTitle) => {
  * Creates and registers a new chat session for a topic.
  */
 export const createChatForTopic = ({ topicId, topicTitle, subject, subtitle }) => {
-  const matchedNote = null;
+  const matchedNote = NOTES.find(n => 
+    (topicId && String(n.id) === String(topicId)) || 
+    (topicTitle && n.title.toLowerCase() === topicTitle.toLowerCase())
+  );
 
-  const title = topicTitle || 'New Topic';
-  const finalSubject = subject || 'Study';
+  const title = topicTitle || matchedNote?.title || 'New Topic';
+  const finalSubject = subject || matchedNote?.subject || 'Study';
   const finalSubtitle = subtitle || 'New conversation';
 
   const newChat = {
@@ -140,14 +180,4 @@ export const saveStickyNotes = (chatId, notes) => {
 export const getStickyNotes = (chatId) => {
   const chat = globalState.chatSessions.find(c => c.id === chatId);
   return chat?.stickyNotes || [];
-};
-
-/**
- * Sets the bookmarked flag for a chat session by id.
- */
-export const setChatSessionBookmarked = (chatId, bookmarked) => {
-  const chat = globalState.chatSessions.find(c => c.id === chatId);
-  if (chat) {
-    chat.bookmarked = bookmarked;
-  }
 };

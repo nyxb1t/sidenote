@@ -10,19 +10,20 @@
  *   onDragStart — () => void  (disables ScrollView scroll)
  *   onDragEnd   — () => void  (re-enables ScrollView scroll)
  *
- * Edge cases addressed:
- *   - Touch inside text/draw area does NOT trigger drag
+ * Characteristics:
+ *   - Proportional scale-based resizing (scale = currentSize / BASE_SIZE)
+ *   - Top-left scaling simulated via translate -> scale -> translate back
+ *   - Outer container size remains dynamic for layout, hit-testing, and dragging
+ *   - Resize handle on outer container bottom-right
  *   - Drag only via header strip
- *   - Resize only via bottom-right handle
- *   - Draw point density throttled (min 4px gap between points) to avoid UI freeze
+ *   - Text-only sticky notes (drawing mode removed)
  *   - Newly created notes auto-activate on mount via autoFocus
  *   - Multiple notes fully independent (no shared refs/state)
  */
 
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   Animated,
@@ -31,13 +32,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-// Minimum distance between recorded draw points (throttle for perf)
-const MIN_POINT_GAP = 4;
+// Base size constant for scale calculations
+const BASE_SIZE = 200;
 // Note size constraints
-const MIN_W = 120;
-const MIN_H = 100;
-const MAX_W = 320;
-const MAX_H = 420;
+const MIN_SIZE = 100;
+const MAX_SIZE = 360;
 
 const DraggableStickyNote = ({
   note,
@@ -48,19 +47,19 @@ const DraggableStickyNote = ({
   onDragStart,
   onDragEnd,
 }) => {
-  const { id, offsetX, offsetY, width, height, text, color, strokes, mode } = note;
+  const { id, offsetX, offsetY, width, height, text, color } = note;
 
-  // ── Animated position & size (initialised from note data) ─────────────────
+  // ── Size state & ref (synchronized with note data) ───────────────────────
+  const initialSize = width || BASE_SIZE;
+  const [currentSize, setCurrentSize] = useState(initialSize);
+  const sizeRef = useRef(initialSize);
+
+  // ── Animated position (initialised from note data) ─────────────────────────
   const posX = useRef(new Animated.Value(offsetX)).current;
   const posY = useRef(new Animated.Value(offsetY)).current;
-  const animW = useRef(new Animated.Value(width)).current;
-  const animH = useRef(new Animated.Value(height)).current;
-
-  // Keep raw JS values in sync for release callbacks
   const posRef = useRef({ x: offsetX, y: offsetY });
-  const sizeRef = useRef({ w: width, h: height });
 
-  // ── Sync animated values when note prop changes externally ────────────────
+  // ── Sync animated values and size when note prop changes externally ───────
   useEffect(() => {
     posX.setValue(offsetX);
     posY.setValue(offsetY);
@@ -68,13 +67,10 @@ const DraggableStickyNote = ({
   }, [offsetX, offsetY]);
 
   useEffect(() => {
-    animW.setValue(width);
-    animH.setValue(height);
-    sizeRef.current = { w: width, h: height };
-  }, [width, height]);
-
-  // ── Current draw stroke being built ───────────────────────────────────────
-  const [currentStroke, setCurrentStroke] = useState(null);
+    const s = note.width || BASE_SIZE;
+    setCurrentSize(s);
+    sizeRef.current = s;
+  }, [note.width]);
 
   // ── PanResponder: DRAG (header only) ──────────────────────────────────────
   const dragBase = useRef({ x: 0, y: 0 });
@@ -110,7 +106,7 @@ const DraggableStickyNote = ({
   ).current;
 
   // ── PanResponder: RESIZE (bottom-right handle) ────────────────────────────
-  const resizeBase = useRef({ w: 0, h: 0 });
+  const resizeBase = useRef(initialSize);
 
   const resizeResponder = useRef(
     PanResponder.create({
@@ -118,20 +114,19 @@ const DraggableStickyNote = ({
       onMoveShouldSetPanResponder: () => true,
 
       onPanResponderGrant: () => {
-        resizeBase.current = { w: sizeRef.current.w, h: sizeRef.current.h };
+        resizeBase.current = sizeRef.current;
         onDragStart?.();
       },
 
       onPanResponderMove: (_, gs) => {
-        const nw = Math.min(MAX_W, Math.max(MIN_W, resizeBase.current.w + gs.dx));
-        const nh = Math.min(MAX_H, Math.max(MIN_H, resizeBase.current.h + gs.dy));
-        animW.setValue(nw);
-        animH.setValue(nh);
-        sizeRef.current = { w: nw, h: nh };
+        const delta = Math.abs(gs.dx) > Math.abs(gs.dy) ? gs.dx : gs.dy;
+        const newSize = Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(resizeBase.current + delta)));
+        sizeRef.current = newSize;
+        setCurrentSize(newSize);
       },
 
       onPanResponderRelease: () => {
-        onUpdate(id, { width: sizeRef.current.w, height: sizeRef.current.h });
+        onUpdate(id, { width: sizeRef.current, height: sizeRef.current });
         onDragEnd?.();
       },
 
@@ -141,54 +136,9 @@ const DraggableStickyNote = ({
     })
   ).current;
 
-  // ── Draw canvas responder ─────────────────────────────────────────────────
-  const lastDrawPoint = useRef(null);
-
-  const handleDrawGrant = useCallback(
-    (e) => {
-      if (mode !== 'draw') return;
-      const touch = e.nativeEvent;
-      const px = touch.locationX;
-      const py = touch.locationY;
-      lastDrawPoint.current = { x: px, y: py };
-      setCurrentStroke({
-        points: [{ x: px, y: py }],
-        color: note.penColor || '#1a1a1a',
-        thickness: note.penThickness || 2,
-      });
-    },
-    [mode, note.penColor, note.penThickness]
-  );
-
-  const handleDrawMove = useCallback(
-    (e) => {
-      if (mode !== 'draw') return;
-      const touch = e.nativeEvent;
-      const px = touch.locationX;
-      const py = touch.locationY;
-
-      // Throttle: skip if too close to last point
-      const last = lastDrawPoint.current;
-      if (last) {
-        const dist = Math.sqrt((px - last.x) ** 2 + (py - last.y) ** 2);
-        if (dist < MIN_POINT_GAP) return;
-      }
-      lastDrawPoint.current = { x: px, y: py };
-
-      setCurrentStroke((prev) =>
-        prev ? { ...prev, points: [...prev.points, { x: px, y: py }] } : prev
-      );
-    },
-    [mode]
-  );
-
-  const handleDrawEnd = useCallback(() => {
-    if (mode !== 'draw' || !currentStroke) return;
-    const committed = [...(strokes || []), currentStroke];
-    onUpdate(id, { strokes: committed });
-    setCurrentStroke(null);
-    lastDrawPoint.current = null;
-  }, [mode, currentStroke, strokes, id, onUpdate]);
+  // ── Scale calculation & origin simulation ─────────────────────────────────
+  const scale = currentSize / BASE_SIZE;
+  const half = BASE_SIZE / 2;
 
   // ── Darken hex for header ─────────────────────────────────────────────────
   const headerColor = darkenHex(color, 18);
@@ -201,8 +151,8 @@ const DraggableStickyNote = ({
         {
           left: posX,
           top: posY,
-          width: animW,
-          height: animH,
+          width: currentSize,
+          height: currentSize,
           backgroundColor: color,
           borderColor: isActive ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.12)',
           borderWidth: isActive ? 1.5 : 1,
@@ -212,46 +162,46 @@ const DraggableStickyNote = ({
         },
       ]}
     >
-      {/* ── DRAG HEADER: PanResponder scoped here only ── */}
+      {/* ── Scaled Content View (Top-left scale simulated via translate -> scale -> translate back) ── */}
       <View
-        style={[styles.header, { backgroundColor: headerColor }]}
-        {...dragResponder.panHandlers}
+        style={[
+          styles.contentWrapper,
+          {
+            transform: [
+              { translateX: -half },
+              { translateY: -half },
+              { scale: scale },
+              { translateX: half },
+              { translateY: half },
+            ],
+          },
+        ]}
       >
-        <View style={styles.gripWrap} pointerEvents="none">
-          <Ionicons name="reorder-three-outline" size={16} color="rgba(0,0,0,0.4)" />
+        {/* ── DRAG HEADER: PanResponder scoped here only ── */}
+        <View
+          style={[styles.header, { backgroundColor: headerColor }]}
+          {...dragResponder.panHandlers}
+        >
+          <View style={styles.gripWrap} pointerEvents="none">
+            <Ionicons name="reorder-three-outline" size={16} color="rgba(0,0,0,0.4)" />
+          </View>
+
+          {/* Close */}
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => onRemove(id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={15} color="rgba(0,0,0,0.5)" />
+          </TouchableOpacity>
         </View>
 
-        {/* Mode toggle: text ↔ draw */}
+        {/* ── NOTE BODY: tap activates, but does NOT trigger drag ── */}
         <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => onUpdate(id, { mode: mode === 'text' ? 'draw' : 'text' })}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.body}
+          activeOpacity={1}
+          onPress={() => onActivate(id)}
         >
-          <Ionicons
-            name={mode === 'text' ? 'pencil-outline' : 'text-outline'}
-            size={14}
-            color="rgba(0,0,0,0.5)"
-          />
-        </TouchableOpacity>
-
-        {/* Close */}
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => onRemove(id)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="close" size={15} color="rgba(0,0,0,0.5)" />
-        </TouchableOpacity>
-      </View>
-
-      {/* ── NOTE BODY: tap activates, but does NOT trigger drag ── */}
-      <TouchableOpacity
-        style={styles.body}
-        activeOpacity={1}
-        onPress={() => onActivate(id)}
-      >
-        {mode === 'text' ? (
-          /* ── TEXT MODE ── */
           <TextInput
             style={styles.textInput}
             value={text}
@@ -264,68 +214,10 @@ const DraggableStickyNote = ({
             scrollEnabled={false}
             onFocus={() => onActivate(id)}
           />
-        ) : (
-          /* ── DRAW MODE ── */
-          <View
-            style={styles.drawCanvas}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={handleDrawGrant}
-            onResponderMove={handleDrawMove}
-            onResponderRelease={handleDrawEnd}
-            onResponderTerminate={handleDrawEnd}
-          >
-            {/* Committed strokes */}
-            {(strokes || []).map((stroke, si) =>
-              stroke.points.map((pt, pi) => (
-                <View
-                  key={`s${si}-p${pi}`}
-                  pointerEvents="none"
-                  style={[
-                    styles.dot,
-                    {
-                      left: pt.x - stroke.thickness / 2,
-                      top: pt.y - stroke.thickness / 2,
-                      width: stroke.thickness,
-                      height: stroke.thickness,
-                      borderRadius: stroke.thickness / 2,
-                      backgroundColor: stroke.color,
-                    },
-                  ]}
-                />
-              ))
-            )}
+        </TouchableOpacity>
+      </View>
 
-            {/* Live in-progress stroke */}
-            {currentStroke &&
-              currentStroke.points.map((pt, pi) => (
-                <View
-                  key={`live-${pi}`}
-                  pointerEvents="none"
-                  style={[
-                    styles.dot,
-                    {
-                      left: pt.x - currentStroke.thickness / 2,
-                      top: pt.y - currentStroke.thickness / 2,
-                      width: currentStroke.thickness,
-                      height: currentStroke.thickness,
-                      borderRadius: currentStroke.thickness / 2,
-                      backgroundColor: currentStroke.color,
-                    },
-                  ]}
-                />
-              ))}
-
-            {(strokes || []).length === 0 && !currentStroke && (
-              <Text style={styles.drawPlaceholder} pointerEvents="none">
-                Draw here…
-              </Text>
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
-
-      {/* ── RESIZE HANDLE (bottom-right) ── */}
+      {/* ── RESIZE HANDLE (bottom-right of dynamic outer container) ── */}
       <View
         style={styles.resizeHandle}
         {...resizeResponder.panHandlers}
@@ -358,6 +250,10 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     overflow: 'hidden',
   },
+  contentWrapper: {
+    width: BASE_SIZE,
+    height: BASE_SIZE,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -380,23 +276,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 24,
     color: '#1a1a1a',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  drawCanvas: {
-    flex: 1,
-    overflow: 'hidden',
-  },
-  dot: {
-    position: 'absolute',
-  },
-  drawPlaceholder: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    color: 'rgba(0,0,0,0.28)',
-    fontSize: 13,
-    fontStyle: 'italic',
+    fontFamily: 'PatrickHand',
+    fontSize: 16,
+    lineHeight: 22,
   },
   resizeHandle: {
     position: 'absolute',
@@ -407,6 +289,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
     padding: 6,
+    zIndex: 20,
   },
   resizeDot: {
     width: 8,
