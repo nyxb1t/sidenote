@@ -7,6 +7,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B0B",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0B0B"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sidenote.app"
@@ -14,12 +20,13 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1C1C1E"
+        "backgroundColor": "#0B0B0B"
       },
+      "backgroundColor": "#0B0B0B",
       "package": "com.sidenote.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       "expo-font",
@@ -30,7 +37,7 @@
         {
           "image": "./assets/splash.png",
           "resizeMode": "contain",
-          "backgroundColor": "#1C1C1E"
+          "backgroundColor": "#0B0B0B"
         }
       ]
     ],

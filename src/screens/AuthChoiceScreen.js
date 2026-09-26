@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../theme/colors';
 
@@ -74,6 +74,13 @@ const AuthChoiceScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <View style={styles.logoWrapper}>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        </View>
         <Text style={styles.title}>SideNote</Text>
         <Text style={styles.subtitle}>your pocket notebook for learning</Text>
       </View>
@@ -116,12 +123,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 32,
-    paddingTop: 140,
+    paddingTop: 100,
     paddingBottom: 60,
   },
   header: {
     alignItems: 'center',
     gap: 8,
+  },
+  logoWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     color: Colors.textPrimary,
