@@ -4,221 +4,126 @@ import {
   Text,
   StyleSheet,
   Animated,
-  TouchableOpacity,
   StatusBar,
+  Easing,
+  Platform,
+  Image,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { useFonts, Caveat_700Bold } from '@expo-google-fonts/caveat';
-import Colors from '../theme/colors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SplashScreen = ({ navigation }) => {
-  const [fontsLoaded] = useFonts({
-    Caveat_700Bold,
-  });
-
-  const iconOpacity = useRef(new Animated.Value(0)).current;
-  const iconScale = useRef(new Animated.Value(0.9)).current;
-  const iconFlip = useRef(new Animated.Value(0)).current;
-  const iconGlow = useRef(new Animated.Value(0)).current;
-  
-  const textWidth = useRef(new Animated.Value(0)).current;
-  const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.92)).current;
 
   useEffect(() => {
-    if (fontsLoaded) {
-      Animated.sequence([
-        // 1. App Icon Entry: Fade + Scale up
-        Animated.parallel([
-          Animated.timing(iconOpacity, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.spring(iconScale, {
-            toValue: 1.0,
-            friction: 8,
-            tension: 40,
-            useNativeDriver: true,
-          }),
-        ]),
+    let isMounted = true;
+    let nextScreen = 'AuthChoiceScreen';
 
-        // 2. Icon Micro-Animation: Pulse Glow + Subtle Flip
-        Animated.parallel([
-          // Soft glow pulse
-          Animated.sequence([
-            Animated.timing(iconGlow, {
-              toValue: 1,
-              duration: 400,
-              useNativeDriver: true,
-            }),
-            Animated.timing(iconGlow, {
-              toValue: 0.2, // leave a slight glow
-              duration: 400,
-              useNativeDriver: true,
-            }),
-          ]),
-          // Subtle flip/wobble
-          Animated.sequence([
-            Animated.timing(iconFlip, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-            Animated.timing(iconFlip, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-          ]),
-        ]),
+    // Check for existing session token in parallel
+    AsyncStorage.getItem('supabase_token')
+      .then((token) => {
+        if (token) {
+          nextScreen = 'App';
+        }
+      })
+      .catch(() => {});
 
-        // 3. Brand Name: Handwritten stroke drawing (mask reveal)
-        Animated.timing(textWidth, {
-          toValue: 200,
-          duration: 800,
-          useNativeDriver: false,
-        }),
+    // 1. Subtle fade-in + scale animation for both icon and title (1000ms)
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
 
-        // 4. Final State: Delay then button fade in
-        Animated.delay(800),
-        Animated.timing(buttonOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [fontsLoaded, iconOpacity, iconScale, iconFlip, iconGlow, textWidth, buttonOpacity]);
+    // 2. Visible for ~2 seconds total, then smoothly transition
+    const timer = setTimeout(() => {
+      if (!isMounted) return;
 
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.fallbackContainer}>
-         <StatusBar barStyle="light-content" backgroundColor="#0F0F10" />
-      </View>
-    );
-  }
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        if (isMounted) {
+          navigation.replace(nextScreen);
+        }
+      });
+    }, 2000);
 
-  const flipInterpolate = iconFlip.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '15deg'],
-  });
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [fadeAnim, scaleAnim, navigation]);
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F0F10" />
-      
-      <View style={styles.centerContent}>
-        {/* Glow behind the icon */}
-        <Animated.View style={[
-          styles.glowBackground,
-          { opacity: iconGlow, transform: [{ scale: iconScale }] }
-        ]} />
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="#0B0B0B"
+        translucent={Platform.OS === 'android'}
+      />
 
-        {/* Notebook Icon */}
-        <Animated.View style={{ 
-          opacity: iconOpacity,
-          transform: [
-            { scale: iconScale },
-            { rotateY: flipInterpolate }
-          ],
-          marginBottom: 16,
-        }}>
-          <Feather name="book-open" size={48} color={Colors.yellow} />
-        </Animated.View>
-
-        {/* Handwritten Text */}
-        <View style={styles.textWrapper}>
-          <Animated.View style={[styles.maskView, { width: textWidth }]}>
-            <Text style={styles.logoText}>sidenote</Text>
-          </Animated.View>
+      <Animated.View
+        style={[
+          styles.content,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
+        <View style={styles.logoWrapper}>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
-      </View>
-
-      {/* Primary CTA */}
-      <Animated.View style={[styles.ctaContainer, { opacity: buttonOpacity }]}>
-        <TouchableOpacity 
-          style={styles.ctaButton} 
-          onPress={() => navigation.replace('AuthChoiceScreen')} 
-          activeOpacity={0.8}
-        >
-          <Text style={styles.ctaText}>Get Started</Text>
-        </TouchableOpacity>
+        <Text style={styles.appName}>Sidenote</Text>
       </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  fallbackContainer: {
-    flex: 1,
-    backgroundColor: '#0F0F10',
-  },
   container: {
     flex: 1,
-    backgroundColor: '#0F0F10',
+    backgroundColor: '#0B0B0B',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerContent: {
-    flex: 1,
+  content: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 60,
   },
-  glowBackground: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.yellow,
-    opacity: 0.15,
-    top: -16, // Center behind the icon
-    shadowColor: Colors.yellow,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  textWrapper: {
-    width: 200,
-    alignItems: 'flex-start',
-    height: 70,
-    justifyContent: 'center',
-  },
-  maskView: {
+  logoWrapper: {
+    width: 120,
+    height: 120,
+    borderRadius: 26,
     overflow: 'hidden',
-    height: 70,
-    justifyContent: 'center',
   },
-  logoText: {
-    fontFamily: 'Caveat_700Bold',
-    fontSize: 60,
-    color: Colors.yellow,
-    width: 200, 
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  appName: {
+    fontFamily: 'PatrickHand',
+    fontSize: 40,
+    color: '#F0EDE4',
+    letterSpacing: 0.5,
+    marginTop: 16,
     textAlign: 'center',
-    includeFontPadding: false,
-    textShadowColor: 'rgba(232, 212, 77, 0.4)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
-  },
-  ctaContainer: {
-    width: '100%',
-    paddingHorizontal: 32,
-    paddingBottom: 60,
-    alignItems: 'center',
-  },
-  ctaButton: {
-    width: '100%',
-    backgroundColor: Colors.yellow,
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  ctaText: {
-    color: '#0F0F10',
-    fontWeight: '700',
-    fontSize: 18,
-    letterSpacing: 0.3,
   },
 });
 
