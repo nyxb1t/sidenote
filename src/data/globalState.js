@@ -7,8 +7,6 @@ export const globalState = {
   assignmentHistory: [],
   deletedChats: [],
   chatSessions: [],
-  currentPlan: 'Free',
-  credits: 20,
   examMode: false,
   user: {
     name: USER.name,

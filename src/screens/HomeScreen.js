@@ -8,6 +8,7 @@ import {
   Dimensions,
   Modal,
   TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -133,8 +134,15 @@ const HomeScreen = ({ navigation }) => {
         subject: lesson.subject || 'Lesson', 
         subtitle: lesson.title || 'Generated Lesson' 
       });
-      if (lesson.content && Array.isArray(lesson.content)) {
-         session.blocks = lesson.content;
+      // Backend stores the full LessonJSON object in content:
+      // { version, title, topic, teachingStrategy, sections: [...] }
+      if (lesson.content && Array.isArray(lesson.content.sections)) {
+        session.blocks = lesson.content.sections;
+      } else if (lesson.content && Array.isArray(lesson.content)) {
+        // Fallback: content is already a flat sections array
+        session.blocks = lesson.content;
+      } else {
+        console.warn('[HomeScreen] Unexpected lesson.content shape:', JSON.stringify(lesson.content)?.slice(0, 200));
       }
       
       // Track session_start event
@@ -150,7 +158,28 @@ const HomeScreen = ({ navigation }) => {
         }
       });
     } catch (err) {
-      alert(err.message || 'Error generating lesson');
+      if (err.status === 402 || err.code === 'INSUFFICIENT_CREDITS') {
+        Alert.alert(
+          'Insufficient Credits',
+          'You have run out of AI credits for this month. Upgrade your plan or top up credits to generate more lessons.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+            { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+          ]
+        );
+      } else if (err.code === 'LESSON_LIMIT_REACHED') {
+        Alert.alert(
+          'Monthly Lesson Limit Reached',
+          'You have reached your monthly lesson limit for your current plan.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade Plan', onPress: () => navigation.navigate('PaywallScreen') },
+          ]
+        );
+      } else {
+        Alert.alert('Error', err.message || 'Error generating lesson');
+      }
     } finally {
       setIsGenerating(false);
     }

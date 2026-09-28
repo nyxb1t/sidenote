@@ -35,7 +35,11 @@ const _fetch = async (endpoint, method = 'POST', bodyData = null) => {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || errorData.message || `Request failed with status ${res.status}`);
+    const message = errorData.error?.message || errorData.message || `Request failed with status ${res.status}`;
+    const err = new Error(message);
+    err.status = res.status;
+    err.code = errorData.error?.code || errorData.code;
+    throw err;
   }
 
   return await res.json();
@@ -45,6 +49,8 @@ export const generateLesson = (topic, difficulty) => _fetch('/v1/ai/lesson', 'PO
 export const generateQuiz = (lesson_id) => _fetch('/v1/ai/quiz', 'POST', { lesson_id });
 export const generateNotes = (lesson_id) => _fetch('/v1/ai/notes', 'POST', { lesson_id });
 export const generateRetryExplanation = (topic, previous_strategy) => _fetch('/v1/ai/retry', 'POST', { topic, previous_strategy });
+export const generateVisualExplanation = (topic, lesson_id) => _fetch('/v1/ai/visual', 'POST', { topic, lesson_id });
+export const generateMoreExamples = (topic, lesson_id) => _fetch('/v1/ai/examples', 'POST', { topic, lesson_id });
 export const trackLearnerEvent = (eventData) => _fetch('/v1/ai/learner/event', 'POST', eventData);
 
 export const getLessonProgress = (lesson_id) => _fetch(`/v1/lessons/${lesson_id}/progress`, 'GET');

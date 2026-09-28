@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,51 +6,45 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  ToastAndroid,
-  Platform,
-  Alert
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { globalState } from '../data/globalState';
+import { getMyEntitlements } from '../services/monetizationService';
 import Colors from '../theme/colors';
 
 const PACKS = [
-  { id: 'Small', name: 'Small Pack', credits: 20, isExamSprint: false, desc: '20 credits' },
-  { id: 'Medium', name: 'Medium Pack', credits: 50, isExamSprint: false, desc: '50 credits' },
-  { id: 'Large', name: 'Large Pack', credits: 150, isExamSprint: false, desc: '150 credits' },
-  { id: 'Exam', name: 'Exam Sprint', credits: 0, isExamSprint: true, desc: 'Unlock "exam mode" flag' },
+  { id: 'Pack50', name: 'Starter Pack', credits: 50, priceText: '₹99', desc: '50 one-time AI credits' },
+  { id: 'Pack150', name: 'Standard Pack', credits: 150, priceText: '₹249', desc: '150 one-time AI credits' },
+  { id: 'Pack300', name: 'Sprint Pack', credits: 300, priceText: '₹449', desc: '300 one-time AI credits' },
 ];
 
 const CreditTopupScreen = ({ navigation }) => {
-  const [selectedPack, setSelectedPack] = useState(null);
-  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [selectedPackId, setSelectedPackId] = useState('Pack150');
+  const [entitlements, setEntitlements] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handlePurchase = () => {
-    if (!selectedPack) return;
-
-    setIsPurchasing(true);
-
-    // Simulate success
-    setTimeout(() => {
-      if (selectedPack.isExamSprint) {
-        globalState.examMode = true;
-      } else {
-        globalState.credits += selectedPack.credits;
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const ent = await getMyEntitlements();
+        if (isMounted && ent) {
+          setEntitlements(ent);
+        }
+      } catch (err) {
+        console.warn('[CreditTopupScreen] Could not load entitlements:', err?.message);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-      
-      setIsPurchasing(false);
-      
-      const message = selectedPack.isExamSprint ? "Exam Sprint activated!" : "Credits added!";
-      if (Platform.OS === 'android') {
-        ToastAndroid.show(message, ToastAndroid.SHORT);
-      } else {
-        Alert.alert('Success', message);
-      }
-      
-      navigation.goBack();
-    }, 1000);
-  };
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const creditsRemaining = entitlements?.creditsRemaining ?? 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -58,6 +52,12 @@ const CreditTopupScreen = ({ navigation }) => {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
+        <View style={styles.creditsBadge}>
+          <Ionicons name="flash" size={14} color={Colors.yellow} />
+          <Text style={styles.creditsBadgeText}>
+            CURRENT CREDITS: <Text style={{ color: Colors.yellow, fontWeight: '700' }}>{creditsRemaining}</Text>
+          </Text>
+        </View>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
@@ -74,51 +74,52 @@ const CreditTopupScreen = ({ navigation }) => {
       >
         <Text style={styles.title}>Top up your credits.</Text>
         <Text style={styles.subtitle}>
-          Running low? Get a one-time credit pack to keep generating insights without changing your plan.
+          Running low? Get a one-time credit pack to keep generating lessons, visual breakdowns, and insights without changing your plan.
         </Text>
 
+        {isLoading ? (
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="small" color={Colors.yellow} />
+            <Text style={styles.loaderText}>Loading balance...</Text>
+          </View>
+        ) : null}
+
         {PACKS.map((pack) => {
-          const isSelected = selectedPack?.id === pack.id;
+          const isSelected = selectedPackId === pack.id;
 
           return (
             <TouchableOpacity
               key={pack.id}
               style={[
                 styles.packCard,
-                isSelected && styles.packCardSelected
+                isSelected && styles.packCardSelected,
               ]}
-              onPress={() => setSelectedPack(pack)}
+              onPress={() => setSelectedPackId(pack.id)}
               activeOpacity={0.8}
             >
-              {pack.isExamSprint && (
-                <View style={styles.examBadge}>
-                  <Text style={styles.examText}>SPECIAL</Text>
-                </View>
-              )}
-              <Text style={[styles.packTitle, isSelected && { color: Colors.yellow }]}>{pack.name}</Text>
+              <View style={styles.packHeader}>
+                <Text style={[styles.packTitle, isSelected && { color: Colors.yellow }]}>
+                  {pack.name}
+                </Text>
+                <Text style={styles.packPrice}>{pack.priceText}</Text>
+              </View>
               <Text style={styles.packDesc}>{pack.desc}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {/* Footer CTA */}
+      {/* ── FOOTER CTA ── */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[
-            styles.buyBtn,
-            (!selectedPack || isPurchasing) && styles.buyBtnDisabled
-          ]}
-          onPress={handlePurchase}
-          disabled={!selectedPack || isPurchasing}
+          style={[styles.buyBtn, styles.buyBtnDisabled]}
+          disabled={true}
         >
-          <Text style={[
-            styles.buyText,
-            (!selectedPack || isPurchasing) && styles.buyTextDisabled
-          ]}>
-            {isPurchasing ? 'Processing...' : (selectedPack ? 'Buy Credits' : 'Select a pack')}
+          <Text style={[styles.buyText, styles.buyTextDisabled]}>
+            Coming soon (In-App Purchases)
           </Text>
         </TouchableOpacity>
+        <Text style={styles.disclaimer}>One-time credit packs will be available via in-app purchases.</Text>
       </View>
     </SafeAreaView>
   );
@@ -132,10 +133,27 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  creditsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(232,212,77,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(232,212,77,0.2)',
+  },
+  creditsBadgeText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   backBtn: {
     width: 36,
@@ -154,59 +172,63 @@ const styles = StyleSheet.create({
   },
   title: {
     color: Colors.textPrimary,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
-    lineHeight: 36,
-    marginBottom: 12,
+    lineHeight: 34,
+    marginBottom: 8,
   },
   subtitle: {
     color: Colors.textMuted,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     marginBottom: 24,
+  },
+  loaderWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  loaderText: {
+    color: Colors.textMuted,
+    fontSize: 13,
   },
   packCard: {
     backgroundColor: Colors.surface,
     borderWidth: 2,
     borderColor: Colors.border,
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    position: 'relative',
+    padding: 18,
+    marginBottom: 14,
   },
   packCardSelected: {
     borderColor: Colors.yellow,
-    backgroundColor: 'rgba(232,212,77,0.05)',
+    backgroundColor: 'rgba(232,212,77,0.04)',
   },
-  examBadge: {
-    position: 'absolute',
-    top: -12,
-    right: 20,
-    backgroundColor: Colors.coral,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  examText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
+  packHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   packTitle: {
     color: Colors.textPrimary,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 8,
+  },
+  packPrice: {
+    color: Colors.yellow,
+    fontSize: 16,
+    fontWeight: '700',
   },
   packDesc: {
     color: Colors.textSecondary,
     fontSize: 14,
-    lineHeight: 22,
   },
   footer: {
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingTop: 14,
+    paddingBottom: 28,
     backgroundColor: Colors.bg,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
@@ -214,21 +236,26 @@ const styles = StyleSheet.create({
   buyBtn: {
     backgroundColor: Colors.yellow,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   buyBtnDisabled: {
-    backgroundColor: Colors.surfaceHigh,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   buyText: {
     color: '#000',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   buyTextDisabled: {
     color: Colors.textMuted,
-  }
+  },
+  disclaimer: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+  },
 });
 
 export default CreditTopupScreen;

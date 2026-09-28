@@ -12,6 +12,8 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().optional(),
+  REVENUECAT_WEBHOOK_AUTH_HEADER: z.string().optional(),
+  REVENUECAT_SECRET_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

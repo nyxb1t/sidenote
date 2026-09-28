@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,6 +121,7 @@ const ChatScreen = ({ navigation, route }) => {
   const [inputText, setInputText] = useState('');
   const [bookmarked, setBookmarked] = useState(chatSession?.bookmarked || false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
 
   // ── Sticky notes state ───────────────────────────────────────────────────
   const [stickyNotes, setStickyNotes] = useState(() =>
@@ -292,8 +294,9 @@ if (id === 'note') {
   addStickyNote();
 
 } else if (id === 'notes') {
-
+  if (isGeneratingNotes) return;
   const fetchNotes = async () => {
+    setIsGeneratingNotes(true);
     try {
       const lessonId = chatSession?.topicId || route.params?.topicId;
       if (!lessonId) {
@@ -313,6 +316,8 @@ if (id === 'note') {
 
     } catch (err) {
       alert(err.message || 'Error generating notes');
+    } finally {
+      setIsGeneratingNotes(false);
     }
   };
 
@@ -325,7 +330,18 @@ if (id === 'note') {
       ]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     } else if (id === 'practice') {
-      navigation.navigate('HomeStack', { screen: 'QuizScreen', params: { topic: chatSession?.title, lesson_id: route.params.topicId } });
+      const lessonId = chatSession?.topicId;
+      if (!lessonId) {
+        alert('No lesson ID available. Please generate a lesson first.');
+        return;
+      }
+      navigation.navigate('HomeStack', {
+        screen: 'QuizScreen',
+        params: {
+          topic: chatSession?.title || 'Lesson',
+          lesson_id: lessonId,
+        },
+      });
     } else if (id === 'examples') {
       setMessages(prev => [
         ...prev,
@@ -361,8 +377,18 @@ if (id === 'note') {
           
           setMessages(prev => {
             const withoutLoading = prev.filter(m => m.id !== 'retry-loading');
-            if (retryObj.content && Array.isArray(retryObj.content)) {
-              return [...withoutLoading, ...retryObj.content];
+            // Backend retry returns a LessonJSON: { version, title, ..., sections: [...] }
+            const sections = retryObj.content && Array.isArray(retryObj.content.sections)
+              ? retryObj.content.sections
+              : Array.isArray(retryObj.content) ? retryObj.content : null;
+            if (sections) {
+              const sectionMsgs = sections.map((section, i) => ({
+                id: 'retry-s-' + Date.now() + '-' + i,
+                type: 'block',
+                timestamp: Date.now() + i,
+                block: section,
+              }));
+              return [...withoutLoading, ...sectionMsgs];
             } else if (retryObj.explanation) {
               return [...withoutLoading, { id: 'retry-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'r-' + Date.now(), type: 'paragraph', text: retryObj.explanation } }];
             }
@@ -512,6 +538,14 @@ if (id === 'note') {
 
       {/* Subtle divider */}
       <View style={styles.dividerTop} />
+
+      {/* ── GENERATING NOTES BANNER ── */}
+      {isGeneratingNotes && (
+        <View style={styles.generatingNotesBanner}>
+          <ActivityIndicator size="small" color={Colors.yellow} />
+          <Text style={styles.generatingNotesText}>Generating notes...</Text>
+        </View>
+      )}
 
       {/* ── KEYBOARD AVOIDING WRAPPER ── */}
       <KeyboardAvoidingView
@@ -680,17 +714,22 @@ scrollEventThrottle={16}
                     onLongPress={() => handlePanelAction(action.id)}
                     activeOpacity={0.65}
                     style={styles.panelItemInner}
+                    disabled={action.id === 'notes' && isGeneratingNotes}
                   >
-                    <Ionicons
-                      name={action.icon}
-                      size={20}
-                      color={Colors.textSecondary}
-                    />
+                    {action.id === 'notes' && isGeneratingNotes ? (
+                      <ActivityIndicator size="small" color={Colors.yellow} />
+                    ) : (
+                      <Ionicons
+                        name={action.icon}
+                        size={20}
+                        color={Colors.textSecondary}
+                      />
+                    )}
                     <Animated.Text
                       style={[styles.panelItemLabel, { opacity: labelOpacity }]}
                       numberOfLines={2}
                     >
-                      {action.label}
+                      {action.id === 'notes' && isGeneratingNotes ? 'Generating...' : action.label}
                     </Animated.Text>
                   </TouchableOpacity>
                 </Animated.View>
@@ -744,6 +783,55 @@ const NotebookBlock = ({ block, onInlineAction }) => {
 
   switch (block.type) {
 
+    // ── Intro section — opening text with subtle accent ───────────────────
+    case 'intro':
+      return (
+        <View style={nb.block}>
+          <Text style={nb.introText}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Explanation section — main content text ──────────────────────────
+    case 'explanation':
+      return (
+        <View style={nb.block}>
+          <Text style={nb.para}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Example section — labelled example block ─────────────────────────
+    case 'example':
+      return (
+        <View style={[nb.block, nb.exampleWrap]}>
+          {block.label ? (
+            <Text style={nb.exampleLabel}>{block.label}</Text>
+          ) : null}
+          <Text style={nb.para}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Insight section — highlighted callout ─────────────────────────────
+    case 'insight':
+      return (
+        <View style={[nb.block, nb.insightWrap]}>
+          <Text style={nb.insightText}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Summary section — key takeaway bullets ───────────────────────────
+    case 'summary':
+      return (
+        <View style={[nb.block, nb.summaryWrap]}>
+          <Text style={nb.summaryHeading}>Key Takeaways</Text>
+          {Array.isArray(block.bullets) && block.bullets.map((bullet, i) => (
+            <View key={i} style={nb.summaryBulletRow}>
+              <Text style={nb.summaryBulletDot}>•</Text>
+              <Text style={nb.summaryBulletText}>{bullet}</Text>
+            </View>
+          ))}
+        </View>
+      );
+
     // ── Plain explanation paragraph ───────────────────────────────────────
     case 'paragraph':
       return (
@@ -768,8 +856,11 @@ const NotebookBlock = ({ block, onInlineAction }) => {
     case 'code':
       return (
         <View style={nb.block}>
+          {block.language ? (
+            <Text style={nb.codeLang}>{block.language}</Text>
+          ) : null}
           <View style={nb.codeWrap}>
-            <Text style={nb.codeText}>{block.code}</Text>
+            <Text style={nb.codeText}>{block.code || block.content}</Text>
           </View>
         </View>
       );
@@ -986,6 +1077,96 @@ const PracticeCard = ({ msg, onEvaluate, evaluated }) => {
 const nb = StyleSheet.create({
   block: {
     marginBottom: 20,
+  },
+
+  // Intro
+  introText: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    lineHeight: 26,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    letterSpacing: 0.1,
+  },
+
+  // Example
+  exampleWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.textMuted,
+    borderRadius: 4,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingVertical: 12,
+  },
+  exampleLabel: {
+    color: Colors.yellow,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+
+  // Insight
+  insightWrap: {
+    backgroundColor: 'rgba(232,212,77,0.06)',
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.yellow,
+    borderRadius: 4,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingVertical: 12,
+  },
+  insightText: {
+    color: Colors.textPrimary,
+    fontSize: 14.5,
+    lineHeight: 24,
+    fontWeight: '400',
+  },
+
+  // Summary
+  summaryWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  summaryHeading: {
+    color: Colors.yellow,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+  summaryBulletRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    paddingRight: 8,
+  },
+  summaryBulletDot: {
+    color: Colors.yellow,
+    fontSize: 15,
+    lineHeight: 22,
+    width: 16,
+  },
+  summaryBulletText: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 22,
+    flex: 1,
+  },
+
+  // Code language label
+  codeLang: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
 
   // Paragraph
@@ -1477,6 +1658,23 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 14,
     lineHeight: 22,
+  },
+  generatingNotesBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(232,212,77,0.08)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(232,212,77,0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  generatingNotesText: {
+    color: Colors.yellow,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });
 

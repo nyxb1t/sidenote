@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +18,9 @@ import {
   USAGE_THIS_MONTH,
   CURRENT_TOPIC,
 } from '../data/mockData';
-import { globalState } from '../data/globalState';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMyEntitlements } from '../services/monetizationService';
+import { logoutRevenueCat } from '../services/revenueCatService';
 import { useFocusEffect } from '@react-navigation/native';
 import Colors from '../theme/colors';
 
@@ -153,9 +156,25 @@ const YouTab = ({ navigation }) => {
           <InfoRow icon="mail-outline" label="Email" value={user.email} />
           <View style={styles.accountDivider} />
           <InfoRow icon="call-outline" label="Phone" value={user.phone} />
-          <View style={styles.accountDivider} />
           <InfoRow icon="calendar-outline" label="Member since" value={user.joinDate || "1 Jun 2025"} />
         </View>
+
+        <TouchableOpacity
+          style={styles.signOutBtn}
+          onPress={async () => {
+            await logoutRevenueCat();
+            await AsyncStorage.removeItem('supabase_token');
+            await AsyncStorage.removeItem('supabase_user_id');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'AuthChoiceScreen' }],
+            });
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="log-out-outline" size={18} color="#FF6B6B" />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={{ height: 32 }} />
@@ -166,23 +185,49 @@ const YouTab = ({ navigation }) => {
 // ─── Plan Tab ────────────────────────────────────────────────────────────────
 
 const PlanTab = ({ navigation }) => {
-  const [currentPlan, setCurrentPlan] = React.useState(globalState.currentPlan);
-  const [credits, setCredits] = React.useState(globalState.credits);
+  const [entitlements, setEntitlements] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   useFocusEffect(
     React.useCallback(() => {
-      setCurrentPlan(globalState.currentPlan);
-      setCredits(globalState.credits);
+      let isMounted = true;
+      setIsLoading(true);
+      getMyEntitlements()
+        .then((ent) => {
+          if (isMounted && ent) {
+            setEntitlements(ent);
+          }
+        })
+        .catch((err) => {
+          console.warn('[ProfileScreen] Could not fetch entitlements:', err?.message);
+        })
+        .finally(() => {
+          if (isMounted) setIsLoading(false);
+        });
+
+      return () => {
+        isMounted = false;
+      };
     }, [])
   );
 
-  let maxCredits = 1000;
-  if (currentPlan === 'Free') maxCredits = 20;
-  else if (currentPlan === 'Learner') maxCredits = 100;
-  else if (currentPlan === 'Scholar') maxCredits = 300;
-  else if (currentPlan === 'Mastery') maxCredits = 1000; // Unlimited effectively
+  const rawPlan = (entitlements?.plan || 'free').toLowerCase();
+  const planName = rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1);
+  const isMastery = rawPlan === 'mastery';
 
-  const creditPct = currentPlan === 'Mastery' ? 1 : Math.min(credits / maxCredits, 1);
+  const creditsRemaining = entitlements?.creditsRemaining ?? 10;
+  const maxCredits = entitlements?.limits?.creditsPerMonth ?? 10;
+  const creditPct = isMastery ? 1 : Math.min(creditsRemaining / (maxCredits || 1), 1);
+
+  const formatResetDate = (isoStr) => {
+    if (!isoStr) return 'next month';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return 'next month';
+    }
+  };
 
   return (
     <ScrollView
@@ -194,33 +239,43 @@ const PlanTab = ({ navigation }) => {
       <View style={styles.section}>
         <SectionTitle>current plan</SectionTitle>
         <View style={styles.planCard}>
-          <View style={styles.planRow}>
-            <View>
-              <Text style={styles.planName}>SideNote {currentPlan}</Text>
-              <Text style={styles.planDetail}>
-                {currentPlan === 'Mastery' ? '∞ credits / month' : `✕ ${maxCredits} credits / month`}
-              </Text>
+          {isLoading && !entitlements ? (
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={Colors.yellow} />
             </View>
-            <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('PaywallScreen')}>
-              <Text style={styles.upgradeBtnText}>Upgrade</Text>
-            </TouchableOpacity>
-          </View>
+          ) : (
+            <>
+              <View style={styles.planRow}>
+                <View>
+                  <Text style={styles.planName}>SideNote {planName}</Text>
+                  <Text style={styles.planDetail}>
+                    {isMastery ? '∞ credits / month' : `✕ ${maxCredits} credits / month`}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('PaywallScreen')}>
+                  <Text style={styles.upgradeBtnText}>Upgrade</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* Credits bar */}
-          <View style={styles.creditsSection}>
-            <View style={styles.creditsRow}>
-              <Text style={styles.creditsLabel}>credits available</Text>
-              <Text style={styles.creditsValue}>
-                {currentPlan === 'Mastery' ? 'Unlimited' : `${credits} / ${maxCredits}`}
-              </Text>
-            </View>
-            <ProgressBar progress={creditPct} height={5} style={{ marginTop: 8 }} />
-          </View>
+              {/* Credits bar */}
+              <View style={styles.creditsSection}>
+                <View style={styles.creditsRow}>
+                  <Text style={styles.creditsLabel}>credits available</Text>
+                  <Text style={styles.creditsValue}>
+                    {isMastery ? 'Unlimited' : `${creditsRemaining} / ${maxCredits}`}
+                  </Text>
+                </View>
+                <ProgressBar progress={creditPct} height={5} style={{ marginTop: 8 }} />
+              </View>
 
-          <View style={styles.resetRow}>
-            <Ionicons name="refresh-outline" size={13} color={Colors.textMuted} />
-            <Text style={styles.planMeta}>resets on 1 Jun 2025</Text>
-          </View>
+              <View style={styles.resetRow}>
+                <Ionicons name="refresh-outline" size={13} color={Colors.textMuted} />
+                <Text style={styles.planMeta}>
+                  resets on {formatResetDate(entitlements?.resetAt)}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -634,6 +689,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 13,
+  },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.25)',
+  },
+  signOutText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

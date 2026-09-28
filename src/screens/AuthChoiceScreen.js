@@ -18,6 +18,7 @@ try {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabaseClient';
+import { initializeRevenueCat } from '../services/revenueCatService';
 
 const AuthChoiceScreen = ({ navigation }) => {
   // Mock function to determine if this is a first-time user
@@ -59,6 +60,10 @@ const AuthChoiceScreen = ({ navigation }) => {
 
       if (data?.session?.access_token) {
         await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
+      if (data?.user?.id) {
+        await AsyncStorage.setItem('supabase_user_id', data.user.id);
+        initializeRevenueCat(data.user.id).catch((err) => console.warn('[AuthChoice] RevenueCat init:', err));
       }
       
       handleAuthSuccess();

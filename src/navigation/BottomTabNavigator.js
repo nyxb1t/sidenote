@@ -50,7 +50,6 @@ const BottomTabNavigator = () => {
         name="ChatStack"
         component={ChatStack}
         options={{
-          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="chatbubble-outline" label="chats" focused={focused} />
           ),

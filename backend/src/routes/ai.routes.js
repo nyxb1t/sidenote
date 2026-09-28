@@ -22,6 +22,8 @@ import {
   generateQuiz,
   generateNotes,
   generateRetryExplanation,
+  generateVisualExplanation,
+  generateMoreExamples,
   updateLearnerModel,
   getPlanLimits,
   InsufficientCreditsError,
@@ -109,25 +111,36 @@ async function loadOrInitCredits(userId, planKey) {
 
 /**
  * Loads or creates the subscription row. Defaults to 'free'.
+ * If a paid subscription has expired (expires_at is in the past),
+ * it safely falls back to 'free' without destroying historical records.
  */
 async function loadOrInitSubscription(userId) {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('plan')
+    .select('plan, expires_at')
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (error) return { plan: null, error };
-  if (data) return { plan: data.plan, error: null };
+  if (error) return { plan: null, expiresAt: null, isExpired: false, error };
+
+  if (data) {
+    if (data.plan !== 'free' && data.expires_at) {
+      const now = new Date();
+      if (now > new Date(data.expires_at)) {
+        return { plan: 'free', expiresAt: data.expires_at, isExpired: true, error: null };
+      }
+    }
+    return { plan: data.plan, expiresAt: data.expires_at, isExpired: false, error: null };
+  }
 
   // No subscription — create default free row
   const { data: created, error: createErr } = await supabase
     .from('subscriptions')
     .insert({ user_id: userId, plan: 'free' })
-    .select('plan')
+    .select('plan, expires_at')
     .single();
 
-  return { plan: created?.plan ?? 'free', error: createErr };
+  return { plan: created?.plan ?? 'free', expiresAt: null, isExpired: false, error: createErr };
 }
 
 /**
@@ -327,6 +340,16 @@ const notesRequestSchema = z.object({
 const retryRequestSchema = z.object({
   topic:            z.string().min(1).max(500),
   previous_strategy: z.enum(['visual', 'analogy', 'step-by-step', 'socratic']),
+}).strict();
+
+const visualRequestSchema = z.object({
+  topic:     z.string().min(1).max(500),
+  lesson_id: z.string().uuid().optional(),
+}).strict();
+
+const examplesRequestSchema = z.object({
+  topic:     z.string().min(1).max(500),
+  lesson_id: z.string().uuid().optional(),
 }).strict();
 
 const learnerEventSchema = z.object({
@@ -637,6 +660,134 @@ aiRouter.post('/retry', async (req, res, next) => {
         previous_strategy: parsed.data.previous_strategy,
         new_strategy:      retryJSON.teachingStrategy,
       },
+    });
+
+    res.status(201).json({ success: true, data: lesson });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /v1/ai/visual ──────────────────────────────────────────────────────
+
+aiRouter.post('/visual', async (req, res, next) => {
+  const parsed = visualRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return next(requestError('Invalid request body', 400, 'INVALID_REQUEST'));
+  }
+
+  const userId = req.user.id;
+
+  try {
+    const { plan, error: planErr } = await loadOrInitSubscription(userId);
+    if (planErr) return next(planErr);
+
+    const { credits, error: creditsErr } = await loadOrInitCredits(userId, plan);
+    if (creditsErr) return next(creditsErr);
+
+    const userContext = { userId, plan, creditsRemaining: credits.credits_remaining };
+
+    const { model: learnerModel, error: modelErr } = await loadOrInitLearnerModel(userId);
+    if (modelErr) return next(modelErr);
+
+    let visualJSON;
+    try {
+      visualJSON = await generateVisualExplanation(
+        parsed.data.topic,
+        { memoryType: getPlanLimits(plan).memoryType, learnerProfile: learnerModel },
+        userContext,
+      );
+    } catch (aiErr) {
+      return next(mapAiError(aiErr));
+    }
+
+    const { data: lesson, error: insertErr } = await supabase
+      .from('lessons')
+      .insert({
+        user_id:           userId,
+        topic:             visualJSON.topic ?? parsed.data.topic,
+        title:             visualJSON.title,
+        subject:           null,
+        teaching_strategy: visualJSON.teachingStrategy,
+        content:           visualJSON,
+      })
+      .select()
+      .single();
+
+    if (insertErr) return next(insertErr);
+
+    await deductOneCredit(userId);
+
+    await supabase.from('progress_events').insert({
+      user_id:    userId,
+      lesson_id:  lesson.id,
+      event_type: 'visual_generated',
+      topic:      visualJSON.topic ?? parsed.data.topic,
+      payload:    { plan, strategy: 'visual' },
+    });
+
+    res.status(201).json({ success: true, data: lesson });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /v1/ai/examples ────────────────────────────────────────────────────
+
+aiRouter.post('/examples', async (req, res, next) => {
+  const parsed = examplesRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return next(requestError('Invalid request body', 400, 'INVALID_REQUEST'));
+  }
+
+  const userId = req.user.id;
+
+  try {
+    const { plan, error: planErr } = await loadOrInitSubscription(userId);
+    if (planErr) return next(planErr);
+
+    const { credits, error: creditsErr } = await loadOrInitCredits(userId, plan);
+    if (creditsErr) return next(creditsErr);
+
+    const userContext = { userId, plan, creditsRemaining: credits.credits_remaining };
+
+    const { model: learnerModel, error: modelErr } = await loadOrInitLearnerModel(userId);
+    if (modelErr) return next(modelErr);
+
+    let examplesJSON;
+    try {
+      examplesJSON = await generateMoreExamples(
+        parsed.data.topic,
+        { memoryType: getPlanLimits(plan).memoryType, learnerProfile: learnerModel },
+        userContext,
+      );
+    } catch (aiErr) {
+      return next(mapAiError(aiErr));
+    }
+
+    const { data: lesson, error: insertErr } = await supabase
+      .from('lessons')
+      .insert({
+        user_id:           userId,
+        topic:             examplesJSON.topic ?? parsed.data.topic,
+        title:             examplesJSON.title,
+        subject:           null,
+        teaching_strategy: examplesJSON.teachingStrategy,
+        content:           examplesJSON,
+      })
+      .select()
+      .single();
+
+    if (insertErr) return next(insertErr);
+
+    await deductOneCredit(userId);
+
+    await supabase.from('progress_events').insert({
+      user_id:    userId,
+      lesson_id:  lesson.id,
+      event_type: 'examples_generated',
+      topic:      examplesJSON.topic ?? parsed.data.topic,
+      payload:    { plan, strategy: 'step-by-step' },
     });
 
     res.status(201).json({ success: true, data: lesson });

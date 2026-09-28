@@ -9,6 +9,8 @@ import AuthChoiceScreen from './src/screens/AuthChoiceScreen';
 import SignInScreen from './src/screens/SignInScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import PaywallScreen from './src/screens/PaywallScreen';
+import CreditTopupScreen from './src/screens/CreditTopupScreen';
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
 import Colors from './src/theme/colors';
 
@@ -38,6 +40,8 @@ export default function App() {
           <Stack.Screen name="SignInScreen" component={SignInScreen} />
           <Stack.Screen name="OnboardingScreen" component={OnboardingScreen} />
           <Stack.Screen name="App" component={BottomTabNavigator} />
+          <Stack.Screen name="PaywallScreen" component={PaywallScreen} options={{ presentation: 'modal' }} />
+          <Stack.Screen name="CreditTopupScreen" component={CreditTopupScreen} options={{ presentation: 'modal' }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
