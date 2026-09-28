@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../theme/colors';
 import { supabase } from '../lib/supabaseClient';
+import { initializeRevenueCat } from '../services/revenueCatService';
 
 let GoogleSignin;
 let statusCodes = {};
@@ -74,6 +75,10 @@ const SignUpScreen = ({ navigation }) => {
       // If email confirmation is required, session may be null
       if (data?.session?.access_token) {
         await AsyncStorage.setItem('supabase_token', data.session.access_token);
+        if (data?.user?.id) {
+          await AsyncStorage.setItem('supabase_user_id', data.user.id);
+          initializeRevenueCat(data.user.id).catch((err) => console.warn('[SignUp] RevenueCat init:', err));
+        }
         navigation.replace('OnboardingScreen');
       } else {
         // Email confirmation pending — inform user and let them sign in after confirming
@@ -113,6 +118,10 @@ const SignUpScreen = ({ navigation }) => {
 
       if (data?.session?.access_token) {
         await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
+      if (data?.user?.id) {
+        await AsyncStorage.setItem('supabase_user_id', data.user.id);
+        initializeRevenueCat(data.user.id).catch((err) => console.warn('[SignUp] RevenueCat init:', err));
       }
       
       // Success logic - navigate to GettingStarted

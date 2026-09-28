@@ -7,6 +7,7 @@ import {
   StatusBar,
   Modal,
   TextInput,
+  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -145,6 +146,74 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  const handleLessonAction = () => {
+    setLessonTopic('');
+    setLessonDifficulty('beginner');
+    setLessonModal(true);
+  };
+
+  const handleGenerateLesson = async () => {
+    if (!lessonTopic.trim()) return;
+    setIsGenerating(true);
+    try {
+      const result = await generateLesson(lessonTopic.trim(), lessonDifficulty);
+      const lesson = result.data || result; // Fallback if wrapper is missing
+      const session = createChatForTopic({ 
+        topicId: lesson.id || Date.now().toString(), 
+        topicTitle: lessonTopic, 
+        subject: lesson.subject || 'Lesson', 
+        subtitle: lesson.title || 'Generated Lesson' 
+      });
+      // Backend stores the full LessonJSON object in content:
+      // { version, title, topic, teachingStrategy, sections: [...] }
+      if (lesson.content && Array.isArray(lesson.content.sections)) {
+        session.blocks = lesson.content.sections;
+      } else if (lesson.content && Array.isArray(lesson.content)) {
+        // Fallback: content is already a flat sections array
+        session.blocks = lesson.content;
+      } else {
+        console.warn('[HomeScreen] Unexpected lesson.content shape:', JSON.stringify(lesson.content)?.slice(0, 200));
+      }
+      
+      // Track session_start event
+      trackLearnerEvent({ type: 'session_start', topic: lessonTopic }).catch(e => console.warn('Learner event failed:', e));
+      
+      setLessonModal(false);
+      navigation.navigate('ChatStack', {
+        screen: 'Chat',
+        params: {
+          topicId: session.id,
+          topicTitle: session.title,
+          isNewChat: false,
+        }
+      });
+    } catch (err) {
+      if (err.status === 402 || err.code === 'INSUFFICIENT_CREDITS') {
+        Alert.alert(
+          'Insufficient Credits',
+          'You have run out of AI credits for this month. Upgrade your plan or top up credits to generate more lessons.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+            { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+          ]
+        );
+      } else if (err.code === 'LESSON_LIMIT_REACHED') {
+        Alert.alert(
+          'Monthly Lesson Limit Reached',
+          'You have reached your monthly lesson limit for your current plan.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade Plan', onPress: () => navigation.navigate('PaywallScreen') },
+          ]
+        );
+      } else {
+        Alert.alert('Error', err.message || 'Error generating lesson');
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
   const handleAssignmentAction = () => {
     if (hasAssignmentsLoc) {
       navigation.navigate('AssignmentHistoryScreen');

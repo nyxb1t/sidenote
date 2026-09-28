@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../theme/colors';
 import { supabase } from '../lib/supabaseClient';
+import { initializeRevenueCat } from '../services/revenueCatService';
 
 let GoogleSignin;
 let statusCodes = {};
@@ -56,6 +57,10 @@ const SignInScreen = ({ navigation }) => {
       if (data?.session?.access_token) {
         await AsyncStorage.setItem('supabase_token', data.session.access_token);
       }
+      if (data?.user?.id) {
+        await AsyncStorage.setItem('supabase_user_id', data.user.id);
+        initializeRevenueCat(data.user.id).catch((err) => console.warn('[SignIn] RevenueCat init:', err));
+      }
       navigation.replace('App');
     } catch (e) {
       setError(e.message || 'Sign in failed. Please try again.');
@@ -91,6 +96,10 @@ const SignInScreen = ({ navigation }) => {
 
       if (data?.session?.access_token) {
         await AsyncStorage.setItem('supabase_token', data.session.access_token);
+      }
+      if (data?.user?.id) {
+        await AsyncStorage.setItem('supabase_user_id', data.user.id);
+        initializeRevenueCat(data.user.id).catch((err) => console.warn('[SignIn] RevenueCat init:', err));
       }
       
       // Success logic - navigate to App
