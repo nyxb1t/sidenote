@@ -11,10 +11,11 @@ import {
   StatusBar,
   Animated,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
+import { useFonts } from 'expo-font';
 import {
   globalState,
   getMostRecentChatForTopic,
@@ -22,20 +23,19 @@ import {
   saveChatNote,
   saveStickyNotes,
   getStickyNotes,
-  setChatSessionBookmarked
+  setChatSessionBookmarked,
 } from '../data/globalState';
-
 import {
   generateNotes,
   generateRetryExplanation,
+  generateVisualExplanation,
+  generateMoreExamples,
   trackLearnerEvent,
-  updateLessonProgress
+  updateLessonProgress,
 } from '../services/aiService';
-
 import DraggableStickyNote from '../components/DraggableStickyNote';
 import StickyNoteToolbar from '../components/StickyNoteToolbar';
 import Colors from '../theme/colors';
-
 
 // ─── Action panel items ────────────────────────────────────────────────────────
 const PANEL_ACTIONS = [
@@ -44,48 +44,12 @@ const PANEL_ACTIONS = [
   { id: 'practice', icon: 'barbell-outline',        label: 'Practice\nquestions' },
   { id: 'retry',    icon: 'refresh-outline',        label: 'Try\nagain'        },
   { id: 'notes',    icon: 'document-text-outline',  label: 'Generate\nNotes'   },
+  { id: 'note',     icon: 'create-outline',         label: 'Sticky\nnote'      },
 ];
 
 // ─── Panel heights ─────────────────────────────────────────────────────────────
 const PANEL_COLLAPSED_H = 54;
 const PANEL_EXPANDED_H  = 130;
-
-// ─── Practice MCQ data ─────────────────────────────────────────────────────────
-// Each question: { question, options: [{key, label}], correctKey, explanations: {key} }
-const PRACTICE_QUESTIONS = [
-  {
-    question: 'What is the time complexity of LIS using patience sorting?',
-    options: [
-      { key: 'A', label: 'O(n²)' },
-      { key: 'B', label: 'O(n log n)' },
-      { key: 'C', label: 'O(2ⁿ)' },
-      { key: 'D', label: 'O(n)' },
-    ],
-    correctKey: 'B',
-    explanations: {
-      A: 'O(n²) applies to the naive DP approach — checking every previous element for each position. Patience sorting does better.',
-      B: 'Correct! Patience sorting uses binary search on "piles", so each of the n elements takes O(log n) → total O(n log n).',
-      C: 'O(2ⁿ) would be brute-force enumeration of all subsequences — extremely slow and not how LIS is solved.',
-      D: 'O(n) is not achievable for LIS in the general case. Even reading the input is O(n), but finding the LIS requires O(n log n).',
-    },
-  },
-  {
-    question: 'Which data structure is best for implementing a priority queue?',
-    options: [
-      { key: 'A', label: 'Array' },
-      { key: 'B', label: 'Linked List' },
-      { key: 'C', label: 'Heap' },
-      { key: 'D', label: 'Stack' },
-    ],
-    correctKey: 'C',
-    explanations: {
-      A: 'An array gives O(n) for insertion or extraction of the min/max. A heap is much more efficient.',
-      B: 'A sorted linked list gives O(n) insertion and O(1) extraction — still not optimal.',
-      C: 'Correct! A heap gives O(log n) insertion and O(log n) extraction, making it the standard choice for priority queues.',
-      D: 'A stack is LIFO — it has no concept of priority. It cannot serve as a priority queue.',
-    },
-  },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
@@ -122,6 +86,10 @@ const ChatScreen = ({ navigation, route }) => {
   const [bookmarked, setBookmarked] = useState(chatSession?.bookmarked || false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    PatrickHand: require('../../assets/fonts/PatrickHand-Regular.ttf'),
+  });
 
   // ── Sticky notes state ───────────────────────────────────────────────────
   const [stickyNotes, setStickyNotes] = useState(() =>
@@ -216,14 +184,10 @@ const ChatScreen = ({ navigation, route }) => {
       id: `note_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       offsetX: 20 + stagger,
       offsetY: 20 + stagger,
-      width: 165,
-      height: 165,
+      width: 200,
+      height: 200,
       text: '',
       color: '#FDEE87',
-      strokes: [],
-      mode: 'text',
-      penColor: '#1a1a1a',
-      penThickness: 2,
     };
     setStickyNotes((prev) => {
       const next = [...prev, newNote];
@@ -290,49 +254,95 @@ const ChatScreen = ({ navigation, route }) => {
   // ── Handle panel action — APPEND-ONLY to messages ────────────────────────
   const handlePanelAction = (id) => {
     collapsePanel();
-if (id === 'note') {
-  addStickyNote();
+    if (id === 'note') {
+      addStickyNote();
+    } else if (id === 'notes') {
+      if (isGeneratingNotes) return;
+      const fetchNotes = async () => {
+        setIsGeneratingNotes(true);
+        try {
+          const lessonId = chatSession?.topicId || route.params?.topicId;
+          if (!lessonId) {
+            Alert.alert('No Lesson', 'No lesson ID available. Please generate a lesson first.');
+            return;
+          }
+          const result = await generateNotes(lessonId);
+          const note = result.data || result;
 
-} else if (id === 'notes') {
-  if (isGeneratingNotes) return;
-  const fetchNotes = async () => {
-    setIsGeneratingNotes(true);
-    try {
+          note.updatedAt = new Date().toLocaleDateString();
+          note.title = note.topic || chatSession?.title || 'Notes';
+
+          navigation.navigate('NotesStack', {
+            screen: 'NoteDetailScreen',
+            params: { note: note, topic: { title: note.title } }
+          });
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to generate notes.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error generating notes');
+          }
+        } finally {
+          setIsGeneratingNotes(false);
+        }
+      };
+      fetchNotes();
+    } else if (id === 'visual') {
+      const fetchVisual = async () => {
+        try {
+          setMessages(prev => [...prev, { id: 'visual-loading', type: 'block', timestamp: Date.now(), block: { id: 'v-load', type: 'paragraph', text: 'Creating visual explanation...' } }]);
+          const topicStr = chatSession?.title || 'this topic';
+          const lessonId = chatSession?.topicId || route.params?.topicId;
+          const result = await generateVisualExplanation(topicStr, lessonId);
+          const visualObj = result.data || result;
+
+          setMessages(prev => {
+            const withoutLoading = prev.filter(m => m.id !== 'visual-loading');
+            const sections = visualObj.content?.sections || visualObj.sections || (Array.isArray(visualObj.content) ? visualObj.content : null);
+            if (sections && Array.isArray(sections)) {
+              const sectionMsgs = sections.map((section, i) => ({
+                id: 'visual-s-' + Date.now() + '-' + i,
+                type: 'block',
+                timestamp: Date.now() + i,
+                block: section,
+              }));
+              return [...withoutLoading, ...sectionMsgs];
+            } else if (visualObj.explanation || visualObj.text) {
+              return [...withoutLoading, { id: 'visual-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'v-' + Date.now(), type: 'paragraph', text: visualObj.explanation || visualObj.text } }];
+            }
+            return withoutLoading;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to generate visual explanations.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error generating visual explanation');
+          }
+          setMessages(prev => prev.filter(m => m.id !== 'visual-loading'));
+        }
+      };
+      fetchVisual();
+    } else if (id === 'practice') {
       const lessonId = chatSession?.topicId || route.params?.topicId;
       if (!lessonId) {
-        alert('No lesson ID available. Please generate a lesson first.');
-        return;
-      }
-      const result = await generateNotes(lessonId);
-      const note = result.data || result;
-
-      note.updatedAt = new Date().toLocaleDateString();
-      note.title = note.topic || chatSession?.title || 'Notes';
-
-      navigation.navigate('NotesStack', {
-        screen: 'NoteDetailScreen',
-        params: { note: note, topic: { title: note.title } }
-      });
-
-    } catch (err) {
-      alert(err.message || 'Error generating notes');
-    } finally {
-      setIsGeneratingNotes(false);
-    }
-  };
-
-  fetchNotes();
-  
-    } else if (id === 'visual') {
-      setMessages(prev => [
-        ...prev,
-        { id: 'visual-' + Date.now(), type: 'visual', timestamp: Date.now() },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
-    } else if (id === 'practice') {
-      const lessonId = chatSession?.topicId;
-      if (!lessonId) {
-        alert('No lesson ID available. Please generate a lesson first.');
+        Alert.alert('No Lesson', 'No lesson ID available. Please generate a lesson first.');
         return;
       }
       navigation.navigate('HomeStack', {
@@ -343,22 +353,49 @@ if (id === 'note') {
         },
       });
     } else if (id === 'examples') {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'b-ex-' + Date.now(),
-          type: 'block',
-          timestamp: Date.now(),
-          block: {
-            id: 'b-ex-' + Date.now(),
-            type: 'think',
-            question: 'Example: Fibonacci sequence',
-            hint: 'Another classical use case for DP.',
-            answer: 'fib(n) = fib(n-1) + fib(n-2). Instead of recomputing, store the values in an array.',
-          },
-        },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      const fetchExamples = async () => {
+        try {
+          setMessages(prev => [...prev, { id: 'examples-loading', type: 'block', timestamp: Date.now(), block: { id: 'ex-load', type: 'paragraph', text: 'Generating more examples...' } }]);
+          const topicStr = chatSession?.title || 'this topic';
+          const lessonId = chatSession?.topicId || route.params?.topicId;
+          const result = await generateMoreExamples(topicStr, lessonId);
+          const examplesObj = result.data || result;
+
+          setMessages(prev => {
+            const withoutLoading = prev.filter(m => m.id !== 'examples-loading');
+            const sections = examplesObj.content?.sections || examplesObj.sections || (Array.isArray(examplesObj.content) ? examplesObj.content : null);
+            if (sections && Array.isArray(sections)) {
+              const sectionMsgs = sections.map((section, i) => ({
+                id: 'ex-s-' + Date.now() + '-' + i,
+                type: 'block',
+                timestamp: Date.now() + i,
+                block: section,
+              }));
+              return [...withoutLoading, ...sectionMsgs];
+            } else if (examplesObj.explanation || examplesObj.text) {
+              return [...withoutLoading, { id: 'ex-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'ex-' + Date.now(), type: 'paragraph', text: examplesObj.explanation || examplesObj.text } }];
+            }
+            return withoutLoading;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to generate more examples.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error generating examples');
+          }
+          setMessages(prev => prev.filter(m => m.id !== 'examples-loading'));
+        }
+      };
+      fetchExamples();
     } else if (id === 'retry') {
       const fetchRetry = async () => {
         try {
@@ -377,7 +414,6 @@ if (id === 'note') {
           
           setMessages(prev => {
             const withoutLoading = prev.filter(m => m.id !== 'retry-loading');
-            // Backend retry returns a LessonJSON: { version, title, ..., sections: [...] }
             const sections = retryObj.content && Array.isArray(retryObj.content.sections)
               ? retryObj.content.sections
               : Array.isArray(retryObj.content) ? retryObj.content : null;
@@ -396,7 +432,19 @@ if (id === 'note') {
           });
           setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
         } catch (err) {
-          alert(err.message || 'Error fetching explanation');
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to retry explanations.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error fetching explanation');
+          }
           setMessages(prev => prev.filter(m => m.id !== 'retry-loading'));
         }
       };
@@ -406,7 +454,19 @@ if (id === 'note') {
 
   // ── Inline content actions ────────────────────────────────────────────────
   const handleInlineAction = (label) => {
-    // placeholder
+    if (!label) return;
+    const lower = label.toLowerCase();
+    if (lower.includes('visual')) {
+      handlePanelAction('visual');
+    } else if (lower.includes('example')) {
+      handlePanelAction('examples');
+    } else if (lower.includes('try') || lower.includes('retry') || lower.includes('again') || lower.includes('explain')) {
+      handlePanelAction('retry');
+    } else if (lower.includes('practice') || lower.includes('quiz') || lower.includes('question')) {
+      handlePanelAction('practice');
+    } else if (lower.includes('note')) {
+      handlePanelAction('notes');
+    }
   };
 
   // ── Send note / question — APPEND-ONLY to messages ───────────────────────
@@ -459,28 +519,6 @@ if (id === 'note') {
   };
 
   const isThreadEmpty = messages.length === 0;
-
-  useEffect(() => {
-    if (route.params?.topicId) {
-      updateLessonProgress(route.params.topicId, { status: 'in_progress', progress: 0.5 }).catch(console.error);
-    }
-  }, [route.params?.topicId]);
-
-  const handleScroll = (event) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const isBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
-    if (isBottom && !scrollRef.current?.hasMarkedComplete) {
-      scrollRef.current.hasMarkedComplete = true;
-      if (route.params?.topicId) {
-        updateLessonProgress(route.params.topicId, { status: 'completed', progress: 1 }).catch(console.error);
-        trackLearnerEvent({ type: 'lesson_complete', topic: chatSession?.title }).catch(console.error);
-        
-        // update local state
-        if (chatSession) chatSession.progress = 1;
-      }
-    }
-  };
-
 
   // ── Opacity interpolation for labels (collapsed → expanded) ──────────────
   const labelOpacity = panelAnim.interpolate({
@@ -564,12 +602,12 @@ if (id === 'note') {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-onScrollBeginDrag={() => {
-  collapsePanel();
-  if (activeNoteId) setActiveNoteId(null);
-}}
-onScroll={handleScroll}
-scrollEventThrottle={16}
+          onScrollBeginDrag={() => {
+            collapsePanel();
+            // Tapping outside a note deactivates it
+            if (activeNoteId) setActiveNoteId(null);
+          }}
+          scrollEventThrottle={16}
           // ↓ Disable scroll while user is dragging or resizing a note
           scrollEnabled={!isDraggingNote}
         >
@@ -598,16 +636,6 @@ scrollEventThrottle={16}
                 return (
                   <View key={msg.id} style={styles.userNote}>
                     <Text style={styles.userNoteText}>{msg.text}</Text>
-                  </View>
-                );
-              }
-              if (msg.type === 'visual') {
-                return (
-                  <View key={msg.id} style={styles.visualMockContainer}>
-                    <View style={styles.visualMockVideo}>
-                      <Ionicons name="play-circle" size={48} color={Colors.yellow} />
-                      <Text style={styles.visualMockText}>Visual Explanation Playing...</Text>
-                    </View>
                   </View>
                 );
               }
@@ -653,7 +681,7 @@ scrollEventThrottle={16}
             placed via offsetX/offsetY relative to this layer.
             Height is large enough to contain all note positions.
           */}
-          {stickyNotes.length > 0 && (
+          {stickyNotes.length > 0 && fontsLoaded && (
             <View
               style={styles.noteLayer}
               // Tap on the empty area of the note layer (not on a note) → deactivate
@@ -1510,25 +1538,6 @@ const styles = StyleSheet.create({
   sendBtnActive: {
     backgroundColor: Colors.yellow,
     borderColor: Colors.yellow,
-  },
-  visualMockContainer: {
-    marginTop: 20,
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  visualMockVideo: {
-    height: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  visualMockText: {
-    marginTop: 10,
-    color: Colors.textSecondary,
-    fontSize: 14,
   },
   practiceMockContainer: {
     marginTop: 20,

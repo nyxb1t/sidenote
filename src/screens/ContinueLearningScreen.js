@@ -87,7 +87,8 @@ export default function ContinueLearningScreen({ navigation }) {
               onPress={() => navigation.navigate('ChatStack', {
                 screen: 'Chat',
                 params: {
-                  topicId: topic.id,
+                  chatId: topic.id,
+                  topicId: topic.topicId || topic.id,
                   topicTitle: topic.title,
                   isNewChat: false,
                 }

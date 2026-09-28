@@ -329,7 +329,7 @@ const SettingsScreen = ({ navigation }) => {
         </SectionGroup>
 
         {/* ── Logout ── */}
-        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.7} onPress={() => navigation.replace('AuthChoiceScreen')}>
+        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.7} onPress={() => navigation.navigate('AuthChoiceScreen')}>
           <Ionicons name="log-out-outline" size={18} color={Colors.coral} />
           <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>

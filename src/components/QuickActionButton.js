@@ -9,7 +9,7 @@ const QuickActionButton = ({ icon, label, onPress }) => {
       <View style={styles.circle}>
         <Ionicons name={icon} size={22} color={Colors.yellow} />
       </View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label} numberOfLines={1}>{label}</Text>
     </TouchableOpacity>
   );
 };
@@ -17,23 +17,26 @@ const QuickActionButton = ({ icon, label, onPress }) => {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    flex: 1,
   },
   circle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   label: {
     color: Colors.textSecondary,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     letterSpacing: 0.2,
+    textAlign: 'center',
   },
 });
 
