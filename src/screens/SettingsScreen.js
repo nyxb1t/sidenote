@@ -329,7 +329,18 @@ const SettingsScreen = ({ navigation }) => {
         </SectionGroup>
 
         {/* ── Logout ── */}
-        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.7} onPress={() => navigation.navigate('AuthChoiceScreen')}>
+        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.7} onPress={async () => {
+          try {
+            const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+            await AsyncStorage.removeItem('supabase_token');
+          } catch (e) {
+            console.warn('Failed to clear token', e);
+          }
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'AuthChoiceScreen' }],
+          });
+        }}>
           <Ionicons name="log-out-outline" size={18} color={Colors.coral} />
           <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>

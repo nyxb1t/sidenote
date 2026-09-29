@@ -36,8 +36,31 @@ export default function QuizScreen({ navigation, route }) {
           setQuestions([]);
         }
       } catch (err) {
-        alert(err.message || 'Error generating quiz');
-        navigation.goBack();
+        console.warn('Quiz generation failed or not authenticated, falling back to mock quiz:', err);
+        // DEMO MODE FALLBACK
+        setQuestions([
+          {
+            id: 'mock_q1',
+            type: 'mcq',
+            question: `What is the main concept of ${topic}?`,
+            options: ['Memorization', 'Breaking problems into subproblems', 'Random guessing', 'Brute force'],
+            correctIndex: 1
+          },
+          {
+            id: 'mock_q2',
+            type: 'true_false',
+            question: 'This topic requires understanding of basic data structures.',
+            correctAnswer: true
+          },
+          {
+            id: 'mock_q3',
+            type: 'mcq',
+            question: 'Which of the following is true?',
+            options: ['It is always O(n)', 'It trades space for time complexity', 'It cannot be optimized', 'It is rarely used'],
+            correctIndex: 1
+          }
+        ]);
+        setQuizId(null); // Explicitly mark as mock so it doesn't post to backend
       } finally {
         setIsLoading(false);
       }
@@ -85,12 +108,16 @@ export default function QuizScreen({ navigation, route }) {
         });
       }
 
-      await trackLearnerEvent({
-        type: 'quiz_result',
-        topic: topic,
-        score: score,
-        mistakeTopics: mistakeTopics
-      });
+      try {
+        await trackLearnerEvent({
+          type: 'quiz_result',
+          topic: topic,
+          score: score,
+          mistakeTopics: mistakeTopics
+        });
+      } catch (e) {
+        console.warn('Could not track learner event in demo mode', e);
+      }
       
       setFinished(true);
       
