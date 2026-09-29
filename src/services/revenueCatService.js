@@ -1,94 +1,244 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Purchases, { LOG_LEVEL } from 'react-native-purchases';
 
-// NOTE: react-native-purchases is NOT installed by default. 
-// For this to work in the real build, you MUST install it via:
-// npx expo install react-native-purchases
-// Since the prompt instructs to keep it safe for demo mode, this scaffold will gracefully fail if not installed.
+let currentAppUserId = null;
+let isInitialized = false;
 
-let Purchases = null;
-try {
-  Purchases = require('react-native-purchases').default;
-} catch (e) {
-  console.warn('react-native-purchases not found. Demo mode fallback active.');
-}
-
-const API_KEYS = {
-  ios: 'YOUR_REVENUECAT_APPLE_KEY', // e.g. appl_xxxx
-  android: 'YOUR_REVENUECAT_GOOGLE_KEY' // e.g. goog_xxxx
-};
-
-// Map RevenueCat Entitlement IDs to internal plans
-export const ENTITLEMENT_ID = 'pro_access'; 
-
-export const PLANS = {
-  FREE: 'free',
-  BASIC: 'basic',
-  PRO: 'pro',
-  ADVANCED: 'advanced'
-};
-
-export const initializeRevenueCat = async () => {
-  if (!Purchases) return false;
+/**
+ * Extracts the authenticated Supabase user UUID from AsyncStorage or JWT payload.
+ */
+export const getStoredUserId = async () => {
   try {
-    if (Platform.OS === 'ios') {
-      await Purchases.configure({ apiKey: API_KEYS.ios });
-    } else if (Platform.OS === 'android') {
-      await Purchases.configure({ apiKey: API_KEYS.android });
+    const directId = await AsyncStorage.getItem('supabase_user_id');
+    if (directId) return directId;
+
+    const token = await AsyncStorage.getItem('supabase_token');
+    if (!token) return null;
+
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const parsed = JSON.parse(jsonPayload);
+      if (parsed?.sub) {
+        await AsyncStorage.setItem('supabase_user_id', parsed.sub);
+        return parsed.sub;
+      }
     }
+  } catch (err) {
+    console.warn('[RevenueCat] Could not extract stored user ID:', err);
+  }
+  return null;
+};
+
+/**
+ * Initializes RevenueCat using stored credentials if an active user session exists.
+ */
+export const initRevenueCatFromStorage = async () => {
+  const userId = await getStoredUserId();
+  if (userId) {
+    return await initializeRevenueCat(userId);
+  }
+  return false;
+};
+
+/**
+ * Returns the platform-specific RevenueCat API key from environment variables.
+ */
+export const getRevenueCatApiKey = () => {
+  if (Platform.OS === 'android') {
+    return process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY || null;
+  }
+  if (Platform.OS === 'ios') {
+    return process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY || null;
+  }
+  return null;
+};
+
+/**
+ * Check whether RevenueCat is ready for purchases.
+ */
+export const isRevenueCatConfigured = () => {
+  return isInitialized && Boolean(getRevenueCatApiKey());
+};
+
+/**
+ * Initialize RevenueCat with the authenticated Supabase user ID.
+ * Must only be called after user authentication with a valid Supabase UUID.
+ */
+export const initializeRevenueCat = async (userId) => {
+  if (!userId || typeof userId !== 'string') {
+    console.warn('[RevenueCat] initializeRevenueCat called without a valid userId.');
+    return false;
+  }
+
+  const apiKey = getRevenueCatApiKey();
+  if (!apiKey) {
+    console.warn(
+      `[RevenueCat] API key not configured for platform ${Platform.OS}. In-app purchases will be unavailable in development.`
+    );
+    return false;
+  }
+
+  try {
+    if (isInitialized && currentAppUserId === userId) {
+      return true;
+    }
+
+    if (isInitialized && currentAppUserId && currentAppUserId !== userId) {
+      // User switched account
+      const { customerInfo } = await Purchases.logIn(userId);
+      currentAppUserId = userId;
+      return true;
+    }
+
+    if (__DEV__) {
+      await Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    }
+
+    await Purchases.configure({
+      apiKey,
+      appUserID: userId,
+    });
+
+    currentAppUserId = userId;
+    isInitialized = true;
     return true;
-  } catch (e) {
-    console.warn('RevenueCat Init Error:', e);
+  } catch (err) {
+    console.error('[RevenueCat] Failed to configure Purchases SDK:', err);
     return false;
   }
 };
 
+/**
+ * Handles logout: resets user session in RevenueCat so subsequent actions
+ * are not attributed to the previous user.
+ */
+export const logoutRevenueCat = async () => {
+  if (!isInitialized) return;
+  try {
+    const isAnon = await Purchases.isAnonymous();
+    if (!isAnon) {
+      await Purchases.logOut();
+    }
+    currentAppUserId = null;
+  } catch (err) {
+    console.warn('[RevenueCat] Error during logout:', err);
+  }
+};
+
+/**
+ * Fetch latest customer info from RevenueCat.
+ */
 export const getCustomerInfo = async () => {
-  if (!Purchases) return { activePlan: PLANS.FREE, isMock: true };
+  if (!isRevenueCatConfigured()) return null;
   try {
-    const customerInfo = await Purchases.getCustomerInfo();
-    return parseCustomerInfo(customerInfo);
-  } catch (e) {
-    console.warn('RevenueCat getCustomerInfo Error:', e);
-    return { activePlan: PLANS.FREE, isMock: true };
+    return await Purchases.getCustomerInfo();
+  } catch (err) {
+    console.warn('[RevenueCat] Error fetching customer info:', err);
+    return null;
   }
 };
 
-export const purchasePackage = async (rcPackage) => {
-  if (!Purchases) return { success: false, error: 'Not installed in demo' };
+/**
+ * Fetch available offerings and packages from RevenueCat.
+ */
+export const getOfferings = async () => {
+  if (!isRevenueCatConfigured()) return null;
   try {
-    const { customerInfo } = await Purchases.purchasePackage(rcPackage);
-    return { success: true, info: parseCustomerInfo(customerInfo) };
-  } catch (e) {
-    console.warn('RevenueCat Purchase Error:', e);
-    return { success: false, error: e.message };
+    const offerings = await Purchases.getOfferings();
+    return offerings;
+  } catch (err) {
+    console.warn('[RevenueCat] Error fetching offerings:', err);
+    return null;
   }
 };
 
+/**
+ * Maps a RevenueCat package or product to our canonical backend plan ('basic', 'pro', 'advanced').
+ * Explicitly ignores and rejects 'mastery' or unknown plans.
+ */
+export const mapPackageToPlan = (pkg) => {
+  if (!pkg) return null;
+  const idStr = `${pkg.identifier || ''} ${pkg.product?.identifier || ''}`.toLowerCase();
+
+  if (/(^|[^a-z])advanced([^a-z]|$)/i.test(idStr)) return 'advanced';
+  if (/(^|[^a-z])pro([^a-z]|$)/i.test(idStr)) return 'pro';
+  if (/(^|[^a-z])basic([^a-z]|$)/i.test(idStr)) return 'basic';
+
+  return null;
+};
+
+/**
+ * Purchases a RevenueCat package.
+ * Returns { success: boolean, customerInfo, userCancelled: boolean, error: string|null }
+ */
+export const purchasePackage = async (pkg) => {
+  if (!isRevenueCatConfigured()) {
+    return {
+      success: false,
+      userCancelled: false,
+      error: 'Purchases are currently unavailable (missing RevenueCat configuration).',
+    };
+  }
+
+  try {
+    const { customerInfo } = await Purchases.purchasePackage(pkg);
+    return {
+      success: true,
+      customerInfo,
+      userCancelled: false,
+      error: null,
+    };
+  } catch (err) {
+    if (err.userCancelled) {
+      return {
+        success: false,
+        userCancelled: true,
+        error: null,
+      };
+    }
+    console.error('[RevenueCat] Purchase failed:', err);
+    return {
+      success: false,
+      userCancelled: false,
+      error: err.message || 'Purchase failed. Please try again.',
+    };
+  }
+};
+
+/**
+ * Restores previous purchases for the current user.
+ * Returns { success: boolean, customerInfo, error: string|null }
+ */
 export const restorePurchases = async () => {
-  if (!Purchases) return { success: false, error: 'Not installed in demo' };
+  if (!isRevenueCatConfigured()) {
+    return {
+      success: false,
+      customerInfo: null,
+      error: 'Purchases are currently unavailable.',
+    };
+  }
+
   try {
     const customerInfo = await Purchases.restorePurchases();
-    return { success: true, info: parseCustomerInfo(customerInfo) };
-  } catch (e) {
-    console.warn('RevenueCat Restore Error:', e);
-    return { success: false, error: e.message };
+    return {
+      success: true,
+      customerInfo,
+      error: null,
+    };
+  } catch (err) {
+    console.error('[RevenueCat] Restore purchases failed:', err);
+    return {
+      success: false,
+      customerInfo: null,
+      error: err.message || 'Unable to restore purchases.',
+    };
   }
-};
-
-const parseCustomerInfo = (customerInfo) => {
-  // If no entitlement, they are free
-  if (!customerInfo || !customerInfo.entitlements.active[ENTITLEMENT_ID]) {
-    return { activePlan: PLANS.FREE, isMock: false };
-  }
-  
-  // They have the entitlement. Figure out which plan based on productIdentifier
-  const activeEntitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
-  const prodId = activeEntitlement.productIdentifier;
-  
-  let plan = PLANS.PRO; // fallback
-  if (prodId.includes('basic')) plan = PLANS.BASIC;
-  if (prodId.includes('pro')) plan = PLANS.PRO;
-  if (prodId.includes('advanced')) plan = PLANS.ADVANCED;
-
-  return { activePlan: plan, isMock: false };
 };

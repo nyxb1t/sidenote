@@ -1,45 +1,107 @@
-import express from 'express';
-import { supabase } from '../config/supabase.js';
-const router = express.Router();
+import { Router } from 'express';
+import { env } from '../config/env.js';
+import {
+  mapRevenueCatProductToPlan,
+  syncRevenueCatSubscription,
+  expireSubscription,
+  updateSubscriptionExpiration,
+} from '../lib/subscription.js';
 
-router.post('/revenuecat', async (req, res) => {
+export const webhooksRouter = Router();
+
+/**
+ * POST /v1/webhooks/revenuecat
+ * Webhook listener for RevenueCat subscription events.
+ */
+webhooksRouter.post('/revenuecat', async (req, res, next) => {
   try {
+    const authHeader = req.headers.authorization;
+    const configuredHeader = env.REVENUECAT_WEBHOOK_AUTH_HEADER;
+
+    // Verify webhook authorization header if configured
+    if (configuredHeader) {
+      if (!authHeader || authHeader !== configuredHeader) {
+        return res.status(401).json({ error: 'Unauthorized webhook request' });
+      }
+    }
+
     const { event } = req.body || {};
-    if (!event) return res.status(400).json({ error: 'No event data' });
-
-    console.log(`[RevenueCat Webhook] Received event: ${event.type} for app_user_id: ${event.app_user_id}`);
-
-    const userId = event.app_user_id; // assuming app_user_id is the supabase user_id
-    if (!userId) return res.status(400).json({ error: 'Missing app_user_id' });
-
-    let plan = 'free';
-    if (['INITIAL_PURCHASE', 'RENEWAL', 'NON_RENEWING_PURCHASE', 'UNCANCELLATION', 'PRODUCT_CHANGE'].includes(event.type)) {
-      const prodId = event.product_id?.toLowerCase() || '';
-      if (prodId.includes('basic')) plan = 'basic';
-      else if (prodId.includes('pro')) plan = 'pro';
-      else if (prodId.includes('advanced')) plan = 'advanced';
-      else plan = 'pro'; // default fallback for entitlement
-    } else if (['CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE'].includes(event.type)) {
-      plan = 'free';
-    } else {
-      // Ignore other events like TEST
-      return res.status(200).json({ received: true, ignored: true });
+    if (!event || typeof event !== 'object' || !event.type) {
+      return res.status(400).json({ error: 'Invalid or missing webhook event payload' });
     }
 
-    const { error } = await supabase
-      .from('subscriptions')
-      .upsert({ user_id: userId, plan: plan, updated_at: new Date().toISOString() });
-
-    if (error) {
-      console.error('[RevenueCat Webhook] Supabase upsert error:', error);
-      return res.status(500).json({ error: 'Database error' });
+    // Handle RevenueCat test webhook ping
+    if (event.type === 'TEST') {
+      return res.status(200).json({ received: true, test: true });
     }
 
-    res.status(200).json({ received: true, plan_updated_to: plan });
+    const appUserId = event.app_user_id || event.original_app_user_id;
+    if (!appUserId || typeof appUserId !== 'string') {
+      return res.status(400).json({ error: 'Missing app_user_id in webhook event' });
+    }
+
+    const expiresAt = event.expiration_at_ms
+      ? new Date(event.expiration_at_ms).toISOString()
+      : null;
+    const startedAt = event.purchased_at_ms
+      ? new Date(event.purchased_at_ms).toISOString()
+      : new Date().toISOString();
+
+    const plan = mapRevenueCatProductToPlan(
+      event.product_id,
+      event.entitlement_id || event.entitlement_ids
+    );
+
+    switch (event.type) {
+      case 'INITIAL_PURCHASE':
+      case 'RENEWAL':
+      case 'UNCANCELLATION':
+      case 'PRODUCT_CHANGE': {
+        await syncRevenueCatSubscription({
+          appUserId,
+          plan,
+          expiresAt,
+          startedAt,
+        });
+        return res.status(200).json({
+          received: true,
+          action: 'subscription_synced',
+          plan,
+          userId: appUserId,
+        });
+      }
+
+      case 'CANCELLATION': {
+        // In RevenueCat, CANCELLATION indicates auto-renew was disabled.
+        // User retains access until period expires.
+        if (expiresAt) {
+          await updateSubscriptionExpiration(appUserId, expiresAt);
+        }
+        return res.status(200).json({
+          received: true,
+          action: 'cancellation_recorded',
+          userId: appUserId,
+        });
+      }
+
+      case 'EXPIRATION': {
+        await expireSubscription(appUserId, expiresAt || new Date().toISOString());
+        return res.status(200).json({
+          received: true,
+          action: 'subscription_expired',
+          userId: appUserId,
+        });
+      }
+
+      default: {
+        return res.status(200).json({
+          received: true,
+          action: 'event_acknowledged',
+          type: event.type,
+        });
+      }
+    }
   } catch (err) {
-    console.error('[RevenueCat Webhook] Error processing:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
-
-export const webhooksRouter = router;

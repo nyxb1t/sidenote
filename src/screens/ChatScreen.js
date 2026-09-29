@@ -10,16 +10,32 @@ import {
   Platform,
   StatusBar,
   Animated,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-// Removed NOTEBOOK_CONTENT import
-import { globalState, getMostRecentChatForTopic, createChatForTopic, saveChatNote, saveStickyNotes, getStickyNotes } from '../data/globalState';
+import {
+  globalState,
+  getMostRecentChatForTopic,
+  createChatForTopic,
+  saveChatNote,
+  saveStickyNotes,
+  getStickyNotes,
+  setChatSessionBookmarked,
+} from '../data/globalState';
+import {
+  generateNotes,
+  generateRetryExplanation,
+  generateVisualExplanation,
+  generateMoreExamples,
+  trackLearnerEvent,
+  updateLessonProgress,
+} from '../services/aiService';
 import DraggableStickyNote from '../components/DraggableStickyNote';
 import StickyNoteToolbar from '../components/StickyNoteToolbar';
 import Colors from '../theme/colors';
-
 
 // ─── Action panel items ────────────────────────────────────────────────────────
 const PANEL_ACTIONS = [
@@ -27,49 +43,13 @@ const PANEL_ACTIONS = [
   { id: 'examples', icon: 'book-outline',           label: 'More\nexamples'    },
   { id: 'practice', icon: 'barbell-outline',        label: 'Practice\nquestions' },
   { id: 'retry',    icon: 'refresh-outline',        label: 'Try\nagain'        },
+  { id: 'notes',    icon: 'document-text-outline',  label: 'Generate\nNotes'   },
   { id: 'note',     icon: 'create-outline',         label: 'Sticky\nnote'      },
 ];
 
 // ─── Panel heights ─────────────────────────────────────────────────────────────
 const PANEL_COLLAPSED_H = 54;
 const PANEL_EXPANDED_H  = 130;
-
-// ─── Practice MCQ data ─────────────────────────────────────────────────────────
-// Each question: { question, options: [{key, label}], correctKey, explanations: {key} }
-const PRACTICE_QUESTIONS = [
-  {
-    question: 'What is the time complexity of LIS using patience sorting?',
-    options: [
-      { key: 'A', label: 'O(n²)' },
-      { key: 'B', label: 'O(n log n)' },
-      { key: 'C', label: 'O(2ⁿ)' },
-      { key: 'D', label: 'O(n)' },
-    ],
-    correctKey: 'B',
-    explanations: {
-      A: 'O(n²) applies to the naive DP approach — checking every previous element for each position. Patience sorting does better.',
-      B: 'Correct! Patience sorting uses binary search on "piles", so each of the n elements takes O(log n) → total O(n log n).',
-      C: 'O(2ⁿ) would be brute-force enumeration of all subsequences — extremely slow and not how LIS is solved.',
-      D: 'O(n) is not achievable for LIS in the general case. Even reading the input is O(n), but finding the LIS requires O(n log n).',
-    },
-  },
-  {
-    question: 'Which data structure is best for implementing a priority queue?',
-    options: [
-      { key: 'A', label: 'Array' },
-      { key: 'B', label: 'Linked List' },
-      { key: 'C', label: 'Heap' },
-      { key: 'D', label: 'Stack' },
-    ],
-    correctKey: 'C',
-    explanations: {
-      A: 'An array gives O(n) for insertion or extraction of the min/max. A heap is much more efficient.',
-      B: 'A sorted linked list gives O(n) insertion and O(1) extraction — still not optimal.',
-      C: 'Correct! A heap gives O(log n) insertion and O(log n) extraction, making it the standard choice for priority queues.',
-      D: 'A stack is LIFO — it has no concept of priority. It cannot serve as a priority queue.',
-    },
-  },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
@@ -105,6 +85,7 @@ const ChatScreen = ({ navigation, route }) => {
   const [inputText, setInputText] = useState('');
   const [bookmarked, setBookmarked] = useState(chatSession?.bookmarked || false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
 
   const [fontsLoaded] = useFonts({
     PatrickHand: require('../../assets/fonts/PatrickHand-Regular.ttf'),
@@ -275,65 +256,217 @@ const ChatScreen = ({ navigation, route }) => {
     collapsePanel();
     if (id === 'note') {
       addStickyNote();
+    } else if (id === 'notes') {
+      if (isGeneratingNotes) return;
+      const fetchNotes = async () => {
+        setIsGeneratingNotes(true);
+        try {
+          const lessonId = chatSession?.topicId || route.params?.topicId;
+          if (!lessonId) {
+            Alert.alert('No Lesson', 'No lesson ID available. Please generate a lesson first.');
+            return;
+          }
+          const result = await generateNotes(lessonId);
+          const note = result.data || result;
+
+          note.updatedAt = new Date().toLocaleDateString();
+          note.title = note.topic || chatSession?.title || 'Notes';
+
+          navigation.navigate('NotesStack', {
+            screen: 'NoteDetailScreen',
+            params: { note: note, topic: { title: note.title } }
+          });
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to generate notes.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error generating notes');
+          }
+        } finally {
+          setIsGeneratingNotes(false);
+        }
+      };
+      fetchNotes();
     } else if (id === 'visual') {
-      setMessages(prev => [
-        ...prev,
-        { id: 'visual-' + Date.now(), type: 'visual', timestamp: Date.now() },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      const fetchVisual = async () => {
+        try {
+          setMessages(prev => [...prev, { id: 'visual-loading', type: 'block', timestamp: Date.now(), block: { id: 'v-load', type: 'paragraph', text: 'Creating visual explanation...' } }]);
+          const topicStr = chatSession?.title || 'this topic';
+          const lessonId = chatSession?.topicId || route.params?.topicId;
+          const result = await generateVisualExplanation(topicStr, lessonId);
+          const visualObj = result.data || result;
+
+          setMessages(prev => {
+            const withoutLoading = prev.filter(m => m.id !== 'visual-loading');
+            const sections = visualObj.content?.sections || visualObj.sections || (Array.isArray(visualObj.content) ? visualObj.content : null);
+            if (sections && Array.isArray(sections)) {
+              const sectionMsgs = sections.map((section, i) => ({
+                id: 'visual-s-' + Date.now() + '-' + i,
+                type: 'block',
+                timestamp: Date.now() + i,
+                block: section,
+              }));
+              return [...withoutLoading, ...sectionMsgs];
+            } else if (visualObj.explanation || visualObj.text) {
+              return [...withoutLoading, { id: 'visual-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'v-' + Date.now(), type: 'paragraph', text: visualObj.explanation || visualObj.text } }];
+            }
+            return withoutLoading;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to generate visual explanations.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error generating visual explanation');
+          }
+          setMessages(prev => prev.filter(m => m.id !== 'visual-loading'));
+        }
+      };
+      fetchVisual();
     } else if (id === 'practice') {
-      const q = PRACTICE_QUESTIONS[Math.floor(Math.random() * PRACTICE_QUESTIONS.length)];
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'practice-' + Date.now(),
-          type: 'practice',
-          timestamp: Date.now(),
-          question: q.question,
-          options: q.options,
-          correctKey: q.correctKey,
-          explanations: q.explanations,
+      const lessonId = chatSession?.topicId || route.params?.topicId;
+      if (!lessonId) {
+        Alert.alert('No Lesson', 'No lesson ID available. Please generate a lesson first.');
+        return;
+      }
+      navigation.navigate('HomeStack', {
+        screen: 'QuizScreen',
+        params: {
+          topic: chatSession?.title || 'Lesson',
+          lesson_id: lessonId,
         },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      });
     } else if (id === 'examples') {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'b-ex-' + Date.now(),
-          type: 'block',
-          timestamp: Date.now(),
-          block: {
-            id: 'b-ex-' + Date.now(),
-            type: 'think',
-            question: 'Example: Fibonacci sequence',
-            hint: 'Another classical use case for DP.',
-            answer: 'fib(n) = fib(n-1) + fib(n-2). Instead of recomputing, store the values in an array.',
-          },
-        },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      const fetchExamples = async () => {
+        try {
+          setMessages(prev => [...prev, { id: 'examples-loading', type: 'block', timestamp: Date.now(), block: { id: 'ex-load', type: 'paragraph', text: 'Generating more examples...' } }]);
+          const topicStr = chatSession?.title || 'this topic';
+          const lessonId = chatSession?.topicId || route.params?.topicId;
+          const result = await generateMoreExamples(topicStr, lessonId);
+          const examplesObj = result.data || result;
+
+          setMessages(prev => {
+            const withoutLoading = prev.filter(m => m.id !== 'examples-loading');
+            const sections = examplesObj.content?.sections || examplesObj.sections || (Array.isArray(examplesObj.content) ? examplesObj.content : null);
+            if (sections && Array.isArray(sections)) {
+              const sectionMsgs = sections.map((section, i) => ({
+                id: 'ex-s-' + Date.now() + '-' + i,
+                type: 'block',
+                timestamp: Date.now() + i,
+                block: section,
+              }));
+              return [...withoutLoading, ...sectionMsgs];
+            } else if (examplesObj.explanation || examplesObj.text) {
+              return [...withoutLoading, { id: 'ex-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'ex-' + Date.now(), type: 'paragraph', text: examplesObj.explanation || examplesObj.text } }];
+            }
+            return withoutLoading;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to generate more examples.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error generating examples');
+          }
+          setMessages(prev => prev.filter(m => m.id !== 'examples-loading'));
+        }
+      };
+      fetchExamples();
     } else if (id === 'retry') {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'b-re-' + Date.now(),
-          type: 'block',
-          timestamp: Date.now(),
-          block: {
-            id: 'b-re-' + Date.now(),
-            type: 'paragraph',
-            text: "Let me explain that differently: Memoisation is just caching. Imagine if you had to recalculate 12 × 12 every time someone asked you. Instead, you just memorize it. That's memoisation.",
-          },
-        },
-      ]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      const fetchRetry = async () => {
+        try {
+          setMessages(prev => [...prev, { id: 'retry-loading', type: 'block', timestamp: Date.now(), block: { id: 'r-load', type: 'paragraph', text: 'Thinking of a different way to explain...' } }]);
+          
+          const previous_strategy = chatSession?.teachingStrategy || 'step-by-step';
+          const topicStr = chatSession?.title || 'this topic';
+          const result = await generateRetryExplanation(topicStr, previous_strategy);
+          const retryObj = result.data || result;
+          
+          await trackLearnerEvent({
+            type: 'retry_requested',
+            topic: topicStr,
+            strategyUsed: retryObj.strategy || previous_strategy
+          });
+          
+          setMessages(prev => {
+            const withoutLoading = prev.filter(m => m.id !== 'retry-loading');
+            const sections = retryObj.content && Array.isArray(retryObj.content.sections)
+              ? retryObj.content.sections
+              : Array.isArray(retryObj.content) ? retryObj.content : null;
+            if (sections) {
+              const sectionMsgs = sections.map((section, i) => ({
+                id: 'retry-s-' + Date.now() + '-' + i,
+                type: 'block',
+                timestamp: Date.now() + i,
+                block: section,
+              }));
+              return [...withoutLoading, ...sectionMsgs];
+            } else if (retryObj.explanation) {
+              return [...withoutLoading, { id: 'retry-' + Date.now(), type: 'block', timestamp: Date.now(), block: { id: 'r-' + Date.now(), type: 'paragraph', text: retryObj.explanation } }];
+            }
+            return withoutLoading;
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+        } catch (err) {
+          if (err?.status === 402 || err?.code === 'INSUFFICIENT_CREDITS') {
+            Alert.alert(
+              'Insufficient Credits',
+              'You have run out of AI credits. Upgrade your plan or top up credits to retry explanations.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Top Up', onPress: () => navigation.navigate('CreditTopupScreen') },
+                { text: 'Upgrade', onPress: () => navigation.navigate('PaywallScreen') },
+              ]
+            );
+          } else {
+            Alert.alert('Error', err.message || 'Error fetching explanation');
+          }
+          setMessages(prev => prev.filter(m => m.id !== 'retry-loading'));
+        }
+      };
+      fetchRetry();
     }
   };
 
   // ── Inline content actions ────────────────────────────────────────────────
   const handleInlineAction = (label) => {
-    // placeholder
+    if (!label) return;
+    const lower = label.toLowerCase();
+    if (lower.includes('visual')) {
+      handlePanelAction('visual');
+    } else if (lower.includes('example')) {
+      handlePanelAction('examples');
+    } else if (lower.includes('try') || lower.includes('retry') || lower.includes('again') || lower.includes('explain')) {
+      handlePanelAction('retry');
+    } else if (lower.includes('practice') || lower.includes('quiz') || lower.includes('question')) {
+      handlePanelAction('practice');
+    } else if (lower.includes('note')) {
+      handlePanelAction('notes');
+    }
   };
 
   // ── Send note / question — APPEND-ONLY to messages ───────────────────────
@@ -444,6 +577,14 @@ const ChatScreen = ({ navigation, route }) => {
       {/* Subtle divider */}
       <View style={styles.dividerTop} />
 
+      {/* ── GENERATING NOTES BANNER ── */}
+      {isGeneratingNotes && (
+        <View style={styles.generatingNotesBanner}>
+          <ActivityIndicator size="small" color={Colors.yellow} />
+          <Text style={styles.generatingNotesText}>Generating notes...</Text>
+        </View>
+      )}
+
       {/* ── KEYBOARD AVOIDING WRAPPER ── */}
       <KeyboardAvoidingView
         style={styles.flex}
@@ -495,16 +636,6 @@ const ChatScreen = ({ navigation, route }) => {
                 return (
                   <View key={msg.id} style={styles.userNote}>
                     <Text style={styles.userNoteText}>{msg.text}</Text>
-                  </View>
-                );
-              }
-              if (msg.type === 'visual') {
-                return (
-                  <View key={msg.id} style={styles.visualMockContainer}>
-                    <View style={styles.visualMockVideo}>
-                      <Ionicons name="play-circle" size={48} color={Colors.yellow} />
-                      <Text style={styles.visualMockText}>Visual Explanation Playing...</Text>
-                    </View>
                   </View>
                 );
               }
@@ -611,17 +742,22 @@ const ChatScreen = ({ navigation, route }) => {
                     onLongPress={() => handlePanelAction(action.id)}
                     activeOpacity={0.65}
                     style={styles.panelItemInner}
+                    disabled={action.id === 'notes' && isGeneratingNotes}
                   >
-                    <Ionicons
-                      name={action.icon}
-                      size={20}
-                      color={Colors.textSecondary}
-                    />
+                    {action.id === 'notes' && isGeneratingNotes ? (
+                      <ActivityIndicator size="small" color={Colors.yellow} />
+                    ) : (
+                      <Ionicons
+                        name={action.icon}
+                        size={20}
+                        color={Colors.textSecondary}
+                      />
+                    )}
                     <Animated.Text
                       style={[styles.panelItemLabel, { opacity: labelOpacity }]}
                       numberOfLines={2}
                     >
-                      {action.label}
+                      {action.id === 'notes' && isGeneratingNotes ? 'Generating...' : action.label}
                     </Animated.Text>
                   </TouchableOpacity>
                 </Animated.View>
@@ -675,6 +811,55 @@ const NotebookBlock = ({ block, onInlineAction }) => {
 
   switch (block.type) {
 
+    // ── Intro section — opening text with subtle accent ───────────────────
+    case 'intro':
+      return (
+        <View style={nb.block}>
+          <Text style={nb.introText}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Explanation section — main content text ──────────────────────────
+    case 'explanation':
+      return (
+        <View style={nb.block}>
+          <Text style={nb.para}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Example section — labelled example block ─────────────────────────
+    case 'example':
+      return (
+        <View style={[nb.block, nb.exampleWrap]}>
+          {block.label ? (
+            <Text style={nb.exampleLabel}>{block.label}</Text>
+          ) : null}
+          <Text style={nb.para}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Insight section — highlighted callout ─────────────────────────────
+    case 'insight':
+      return (
+        <View style={[nb.block, nb.insightWrap]}>
+          <Text style={nb.insightText}>{block.content}</Text>
+        </View>
+      );
+
+    // ── Summary section — key takeaway bullets ───────────────────────────
+    case 'summary':
+      return (
+        <View style={[nb.block, nb.summaryWrap]}>
+          <Text style={nb.summaryHeading}>Key Takeaways</Text>
+          {Array.isArray(block.bullets) && block.bullets.map((bullet, i) => (
+            <View key={i} style={nb.summaryBulletRow}>
+              <Text style={nb.summaryBulletDot}>•</Text>
+              <Text style={nb.summaryBulletText}>{bullet}</Text>
+            </View>
+          ))}
+        </View>
+      );
+
     // ── Plain explanation paragraph ───────────────────────────────────────
     case 'paragraph':
       return (
@@ -699,8 +884,11 @@ const NotebookBlock = ({ block, onInlineAction }) => {
     case 'code':
       return (
         <View style={nb.block}>
+          {block.language ? (
+            <Text style={nb.codeLang}>{block.language}</Text>
+          ) : null}
           <View style={nb.codeWrap}>
-            <Text style={nb.codeText}>{block.code}</Text>
+            <Text style={nb.codeText}>{block.code || block.content}</Text>
           </View>
         </View>
       );
@@ -917,6 +1105,96 @@ const PracticeCard = ({ msg, onEvaluate, evaluated }) => {
 const nb = StyleSheet.create({
   block: {
     marginBottom: 20,
+  },
+
+  // Intro
+  introText: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    lineHeight: 26,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    letterSpacing: 0.1,
+  },
+
+  // Example
+  exampleWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.textMuted,
+    borderRadius: 4,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingVertical: 12,
+  },
+  exampleLabel: {
+    color: Colors.yellow,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+
+  // Insight
+  insightWrap: {
+    backgroundColor: 'rgba(232,212,77,0.06)',
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.yellow,
+    borderRadius: 4,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingVertical: 12,
+  },
+  insightText: {
+    color: Colors.textPrimary,
+    fontSize: 14.5,
+    lineHeight: 24,
+    fontWeight: '400',
+  },
+
+  // Summary
+  summaryWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  summaryHeading: {
+    color: Colors.yellow,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+  summaryBulletRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    paddingRight: 8,
+  },
+  summaryBulletDot: {
+    color: Colors.yellow,
+    fontSize: 15,
+    lineHeight: 22,
+    width: 16,
+  },
+  summaryBulletText: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 22,
+    flex: 1,
+  },
+
+  // Code language label
+  codeLang: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
 
   // Paragraph
@@ -1261,25 +1539,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.yellow,
     borderColor: Colors.yellow,
   },
-  visualMockContainer: {
-    marginTop: 20,
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  visualMockVideo: {
-    height: 180,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  visualMockText: {
-    marginTop: 10,
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
   practiceMockContainer: {
     marginTop: 20,
     marginBottom: 20,
@@ -1408,6 +1667,23 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 14,
     lineHeight: 22,
+  },
+  generatingNotesBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(232,212,77,0.08)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(232,212,77,0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  generatingNotesText: {
+    color: Colors.yellow,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });
 

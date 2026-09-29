@@ -30,6 +30,8 @@ const { generateLesson }            = require(path.join(backendRoot, 'ai', 'less
 const { generateQuiz }              = require(path.join(backendRoot, 'ai', 'quizService.cjs'));
 const { generateNotes }             = require(path.join(backendRoot, 'ai', 'notesService.cjs'));
 const { generateRetryExplanation }  = require(path.join(backendRoot, 'ai', 'retryService.cjs'));
+const { generateVisualExplanation } = require(path.join(backendRoot, 'ai', 'visualService.cjs'));
+const { generateMoreExamples }      = require(path.join(backendRoot, 'ai', 'examplesService.cjs'));
 
 // ── Learner services ──────────────────────────────────────────────────────────
 const { updateLearnerModel, selectTeachingStrategy } =
@@ -56,6 +58,8 @@ export {
   generateQuiz,
   generateNotes,
   generateRetryExplanation,
+  generateVisualExplanation,
+  generateMoreExamples,
   // Learner
   updateLearnerModel,
   selectTeachingStrategy,
