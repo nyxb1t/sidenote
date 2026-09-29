@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { TOPIC_NOTES } from '../data/mockData';
 import Colors from '../theme/colors';
 
 // ── Tag pill ──────────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ const NoteItem = ({ note, onPress }) => {
 // ── Screen ────────────────────────────────────────────────────────────────────
 const TopicNotesScreen = ({ route, navigation }) => {
   const { topic } = route.params;           // topic = one NOTES entry
-  const notes = [];
+  const notes = TOPIC_NOTES[topic.id] || [];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

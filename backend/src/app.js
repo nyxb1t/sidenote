@@ -10,12 +10,23 @@ import { notesRouter } from './routes/notes.routes.js';
 import { progressEventsRouter } from './routes/progress-events.routes.js';
 import { quizzesRouter } from './routes/quizzes.routes.js';
 import { aiRouter } from './routes/ai.routes.js';
+import { webhooksRouter } from './routes/webhooks.routes.js';
 
 export const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: env.FRONTEND_ORIGIN }));
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${req.method}] ${req.originalUrl} - ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
 app.use('/v1/health', healthRouter);
 app.use('/v1/files', filesRouter);
 app.use('/v1/lessons', lessonsRouter);
@@ -23,6 +34,7 @@ app.use('/v1/notes', notesRouter);
 app.use('/v1/progress-events', progressEventsRouter);
 app.use('/v1/quizzes', quizzesRouter);
 app.use('/v1/ai', aiRouter);
+app.use('/v1/webhooks', webhooksRouter);
 app.use((req, res, next) => {
   next(Object.assign(new Error('Not found'), { statusCode: 404, code: 'NOT_FOUND' }));
 });

@@ -86,7 +86,7 @@ const HomeScreen = ({ navigation }) => {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8,
       });
@@ -107,6 +107,7 @@ const HomeScreen = ({ navigation }) => {
         }
       }
     } catch (e) {
+      console.warn('ImagePicker Error:', e);
       setErrorMessage('Could not open image picker. Please try again.');
     }
   };
