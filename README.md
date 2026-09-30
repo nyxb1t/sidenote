@@ -72,7 +72,7 @@ Sidenote provides a structured learning flow:
 
 ## Demo & Access
 
-- **Demo Video:** *(Add Devpost / YouTube link)*  
+- **Demo Video:** *https://youtu.be/CFae4IavV9c?si=nVF-MSZywaPmMEAR*  
 - **APK Download:** *(Add APK link here)*   
 
 ---
