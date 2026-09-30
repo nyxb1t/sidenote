@@ -1,65 +1,135 @@
-# Sidenote — AI Study Partner
+# 🚀 Sidenote
 
-A React Native (Expo) mobile app. Dark-themed, personal AI study companion with notebook-style chat, notes, and progress tracking.
+## Overview
 
-## Stack
+Sidenote is an AI-powered learning application designed to transform fragmented study workflows into a single, structured, and interactive experience.
 
-- **Expo SDK 51**
-- **React Navigation v6** — Bottom Tab + Native Stack
-- **@expo/vector-icons** — Ionicons
-- **react-native-safe-area-context**
+Modern learning is scattered across multiple platforms — explanations, practice, and note-taking all happen separately. Sidenote eliminates this fragmentation by bringing everything into one unified environment where users can learn, practice, and take contextual notes without switching contexts.
 
-## Screens
+---
 
-| Screen | Scroll | Description |
-|---|---|---|
-| Splash | — | Animated logo entrance + CTA |
-| Onboarding | — | 3-slide FlatList with dot indicators |
-| Home | ❌ | Fixed layout — greeting, continue learning, quick actions |
-| Chat | ✅ | Notebook-style messages, action buttons, fixed input bar |
-| Notes | ✅ | Search + subject filters + note cards |
-| Profile | ✅ | Stats, plan info, learning insights, usage |
+## Why We Built This
 
-## Theme
+Students today struggle with:
+- Constant context switching between apps  
+- Passive consumption of content without retention  
+- Disconnected note-taking and practice  
 
-| Token | Value | Use |
-|---|---|---|
-| `bg` | `#1C1C1E` | Main background |
-| `surface` | `#252527` | Cards & inputs |
-| `yellow` | `#E8D44D` | Primary accent |
-| `coral` | `#E87D6A` | Secondary accent (minimal) |
-| `textPrimary` | `#F0EDE4` | Main text |
+This leads to reduced focus, lower engagement, and inefficient learning.
 
-## Run
+Sidenote was built to solve this by creating a **continuous learning loop**, where understanding, practice, and note-taking happen together.
 
-```bash
-npm install
-npx expo start
-```
+---
 
-Scan the QR code with **Expo Go** on your phone (iOS or Android).
+## What Sidenote Does
 
-## Folder Structure
+Sidenote provides a structured learning flow:
 
-```
-sidenote/
-├── App.js                          # Root — phase manager (splash→onboarding→app)
-├── src/
-│   ├── theme/colors.js             # Centralised color tokens
-│   ├── data/mockData.js            # All static mock data
-│   ├── navigation/
-│   │   └── BottomTabNavigator.js   # Bottom tabs
-│   ├── screens/
-│   │   ├── SplashScreen.js
-│   │   ├── OnboardingScreen.js
-│   │   ├── HomeScreen.js
-│   │   ├── ChatScreen.js
-│   │   ├── NotesScreen.js
-│   │   └── ProfileScreen.js
-│   └── components/
-│       ├── ProgressBar.js
-│       ├── QuickActionButton.js
-│       ├── NoteCard.js
-│       ├── ChatMessage.js
-│       └── StatCard.js
-```
+> **Explanation → Interaction → Practice → Feedback → Notes**
+
+### Core Functionalities
+
+- **AI-Powered Learning Chat**
+  - Topic-based structured explanations  
+  - Context-aware responses based on conversation  
+
+- **Practice System**
+  - Generate MCQs based on the current topic  
+  - Immediate evaluation and feedback  
+
+- **Sticky Notes (Contextual Note-Taking)**
+  - Create notes directly inside the learning interface  
+  - Drag, move, and resize notes freely  
+  - Notes persist within each learning session  
+
+- **Session-Based Learning**
+  - Conversations maintain continuity  
+  - Learning builds progressively over time  
+
+---
+
+## Tech Stack
+
+### Frontend
+- React Native (Expo)
+- JavaScript
+
+### Backend
+- Node.js
+- Express.js
+
+### AI Integration
+- Gemini API
+
+### Database
+- Supabase
+
+### Build & Deployment
+- Expo EAS
+- GitHub
+
+---
+
+## Demo & Access
+
+- **Demo Video:** *(Add Devpost / YouTube link)*  
+- **APK Download:** *(Add APK link here)*  
+- **GitHub Repository:** *(Add repo link here)*  
+
+---
+
+## How to Run the App (APK)
+
+1. Download the APK file from the link above  
+2. Transfer it to your Android device  
+3. Enable installation from unknown sources (if required)  
+4. Install and open the app  
+
+> Note: Ensure your device and backend server (if running locally) are on the same network for full functionality.
+
+---
+
+## Disclaimer
+
+This project was developed under hackathon constraints.
+
+- Some features currently use **mock or partially implemented data**  
+- Backend integration is **in progress for certain flows**  
+- Certain advanced features are **functional prototypes rather than production-ready systems**  
+
+Despite this, the core architecture and user experience are fully designed for scalability and real-world deployment.
+
+---
+
+## Future Vision
+
+Sidenote is designed to evolve into a complete learning ecosystem:
+
+- Full backend integration with real-time data flow  
+- Intelligent personalization based on user learning patterns  
+- Advanced notes archive with export functionality  
+- Reference-based learning (assignments, syllabus, notes)  
+- Improved performance and UI refinement  
+
+---
+
+## Team
+
+Built as part of a hackathon project by:
+
+- Prachi  
+- *(Add teammate names here)*  
+
+---
+
+## Closing Note
+
+Sidenote is not just another learning app.
+
+It redefines the process from:
+
+> “study first, practice later”
+
+to
+
+> **“learn by doing — in one place.”**
