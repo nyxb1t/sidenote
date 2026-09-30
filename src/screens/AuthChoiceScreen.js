@@ -44,6 +44,9 @@ const AuthChoiceScreen = ({ navigation }) => {
       const userInfo = await GoogleSignin.signIn();
       const idToken = userInfo.idToken || userInfo.data?.idToken;
       
+      console.log('[GoogleAuth] Web Client ID configured:', !!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+      console.log('[GoogleAuth] Supabase URL configured:', !!process.env.EXPO_PUBLIC_SUPABASE_URL);
+
       if (!idToken) {
         throw new Error('No ID token present!');
       }
@@ -54,9 +57,11 @@ const AuthChoiceScreen = ({ navigation }) => {
       });
 
       if (authError) {
-        console.error('Google Sign-In failed.', authError.message);
+        console.error('[GoogleAuth] Supabase signInWithIdToken failed:', authError.message);
         return;
       }
+
+      console.log('[GoogleAuth] Session created successfully for user:', data?.user?.id);
 
       if (data?.session?.access_token) {
         await AsyncStorage.setItem('supabase_token', data.session.access_token);

@@ -70,6 +70,8 @@ export const uploadFile = async (fileObj) => {
     throw new Error('Invalid file selected');
   }
 
+  const token = await getAuthToken();
+
   const fileResponse = await fetch(fileObj.uri);
   const blob = await fileResponse.blob();
 
@@ -78,12 +80,18 @@ export const uploadFile = async (fileObj) => {
 
   const res = await fetch(`${API_URL}/v1/files`, {
     method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
     body: formData,
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.log("UPLOAD ERROR:", text);
+    if (res.status === 401) {
+      throw new Error("Authentication required. Please sign in.");
+    }
     throw new Error("Upload failed. Try again.");
   }
 

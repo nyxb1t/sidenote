@@ -727,18 +727,20 @@ const ChatScreen = ({ navigation, route }) => {
           {/* ── ACTION PANEL ── */}
           <Animated.View style={[styles.actionPanel, { height: panelAnim }]}>
             {/* Collapsed strip — always tappable */}
-            <TouchableOpacity
-              style={styles.panelStrip}
-              onPress={togglePanel}
-              activeOpacity={0.85}
-            >
+            <View style={styles.panelStrip}>
               {PANEL_ACTIONS.map((action) => (
                 <Animated.View
                   key={action.id}
                   style={[styles.panelItem, { marginBottom: iconMarginBottom }]}
                 >
                   <TouchableOpacity
-                    onPress={() => panelOpen && handlePanelAction(action.id)}
+                    onPress={() => {
+                      if (panelOpen) {
+                        handlePanelAction(action.id);
+                      } else {
+                        togglePanel();
+                      }
+                    }}
                     onLongPress={() => handlePanelAction(action.id)}
                     activeOpacity={0.65}
                     style={styles.panelItemInner}
@@ -762,7 +764,7 @@ const ChatScreen = ({ navigation, route }) => {
                   </TouchableOpacity>
                 </Animated.View>
               ))}
-            </TouchableOpacity>
+            </View>
           </Animated.View>
 
           {/* ── INPUT BAR ── */}

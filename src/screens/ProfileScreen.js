@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMyEntitlements } from '../services/monetizationService';
 import { logoutRevenueCat } from '../services/revenueCatService';
 import { useFocusEffect } from '@react-navigation/native';
+import { globalState } from '../data/globalState';
 import Colors from '../theme/colors';
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
