@@ -72,19 +72,18 @@ Sidenote provides a structured learning flow:
 
 ## Demo & Access
 
-- **Demo Video:** *(Add Devpost / YouTube link)*  
-- **APK Download:** *(Add APK link here)*  
+- **Demo Video:** *https://youtu.be/CFae4IavV9c?si=nVF-MSZywaPmMEAR*  
+- **APK Download:** *(Add APK link here)*   
 
 ---
 
 ## How to Run the App (APK)
 
-1. Download the APK file from the link above  
-2. Transfer it to your Android device  
-3. Enable installation from unknown sources (if required)  
-4. Install and open the app  
+A prebuilt APK is provided for easy installation:
 
-> Note: Ensure your device and backend server (if running locally) are on the same network for full functionality.
+- Download the APK from the link above  
+- Install directly on an Android device  
+- No build steps required  
 
 ---
 
