@@ -74,7 +74,6 @@ Sidenote provides a structured learning flow:
 
 - **Demo Video:** *(Add Devpost / YouTube link)*  
 - **APK Download:** *(Add APK link here)*  
-- **GitHub Repository:** *(Add repo link here)*  
 
 ---
 
@@ -117,8 +116,9 @@ Sidenote is designed to evolve into a complete learning ecosystem:
 
 Built as part of a hackathon project by:
 
-- Prachi  
-- *(Add teammate names here)*  
+- Prachi Sinha
+- Garima Saxena
+- Sarthak Khandelwal 
 
 ---
 
