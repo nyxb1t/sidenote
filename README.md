@@ -72,8 +72,8 @@ Sidenote provides a structured learning flow:
 
 ## Demo & Access
 
-- **Demo Video:** *https://youtu.be/CFae4IavV9c?si=nVF-MSZywaPmMEAR*  
-- **APK Download:** *(Add APK link here)*   
+- **Demo Video:** *[https://youtu.be/CFae4IavV9c?si=nVF-MSZywaPmMEAR]*  
+- **APK Download:** *[(https://expo.dev/artifacts/eas/G_WiacrXch16wkE5EsG9e-l-ciNi95ifonfBZEgYTTY.apk?utm_source=chatgpt.com)]*   
 
 ---
 
